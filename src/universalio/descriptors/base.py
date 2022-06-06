@@ -1,9 +1,48 @@
 import abc
+import pathlib
 from urllib.parse import urlsplit
 import asyncio
-from functools import wraps, partial
+from autoinject import injector
+import atexit
+from universalio import GlobalLoopContext
 
 DEFAULT_CHUNK_SIZE = 1048576
+
+
+class ConnectionRegistry(abc.ABC):
+
+    loop: GlobalLoopContext = None
+
+    @injector.construct
+    def __init__(self):
+        self.host_cache = {}
+        atexit.register(ConnectionRegistry.exit, self)
+
+    async def connect(self, *args, **kwargs):
+        key = self._construct_key(*args, **kwargs)
+        if key not in self.host_cache:
+            self.host_cache[key] = await self._create_connection(*args, **kwargs)
+        return self.host_cache[key]
+
+    def exit(self):
+        self.loop.run(self.exit_async())
+
+    async def exit_async(self):
+        for key in self.host_cache:
+            await self._close_connection(self.host_cache[key])
+        self.host_cache = {}
+
+    @abc.abstractmethod
+    def _construct_key(self, *args, **kwargs):
+        pass
+
+    @abc.abstractmethod
+    async def _create_connection(self, *args, **kwargs):
+        pass
+
+    @abc.abstractmethod
+    async def _close_connection(self, conn):
+        pass
 
 
 class FileReader(abc.ABC):
@@ -28,6 +67,9 @@ class FileWriter(abc.ABC):
 
 class ResourceDescriptor(abc.ABC):
 
+    loop: GlobalLoopContext = None
+
+    @injector.construct
     def __init__(self):
         pass
 
@@ -83,6 +125,9 @@ class ResourceDescriptor(abc.ABC):
     async def list_async(self):
         pass
 
+    def _create_descriptor(self, *args, **kwargs):
+        return self.__class__(*args, **kwargs)
+
     def copy_all_to(self, target_dir, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE, recursive=False):
         asyncio.gather(self.copy_all_to_async(target_dir, allow_overwrite, chunk_size, recursive, await_completion=True))
 
@@ -104,13 +149,13 @@ class ResourceDescriptor(abc.ABC):
         return tasks
 
     def copy_from(self, source_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
-        asyncio.run(self.copy_from_async(source_resource, allow_overwrite, chunk_size))
+        self.loop.run(self.copy_from_async(source_resource, allow_overwrite, chunk_size))
 
     async def copy_from_async(self, source_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
         await source_resource.copy_to_async(self, allow_overwrite, chunk_size)
 
     def copy_to(self, target_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
-        asyncio.run(self.copy_from_async(target_resource, allow_overwrite, chunk_size))
+        self.loop.run(self.copy_from_async(target_resource, allow_overwrite, chunk_size))
 
     async def copy_to_async(self, target_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
         if not await self.is_file_async():
@@ -129,39 +174,39 @@ class ResourceDescriptor(abc.ABC):
 class AsynchronousDescriptor(ResourceDescriptor, abc.ABC):
 
     def is_file(self):
-        return asyncio.run(self.is_file_async())
+        return self.loop.run(self.is_file_async())
 
     def is_dir(self):
-        return asyncio.run(self.is_dir_async())
+        return self.loop.run(self.is_dir_async())
 
     def exists(self):
-        return asyncio.run(self.exists_async())
+        return self.loop.run(self.exists_async())
 
     def list(self):
-        for f in asyncio.run(self.list_async()):
+        for f in self.loop.run(self.list_async()):
             yield f
 
 
 class SynchronousDescriptor(ResourceDescriptor, abc.ABC):
 
     async def is_file_async(self):
-        return await asyncio.get_running_loop().run_in_executor(None, self.is_file)
+        return await self.loop.execute(self.is_file)
 
     async def is_dir_async(self):
-        return await asyncio.get_running_loop().run_in_executor(None, self.is_dir)
+        return await self.loop.execute(self.is_dir)
 
     async def exists_async(self):
-        return await asyncio.get_running_loop().run_in_executor(None, self.exists)
+        return await self.loop.execute(self.exists)
 
     async def list_async(self):
-        async for x in await asyncio.get_running_loop().run_in_executor(None, self.list):
+        for x in await self.loop.execute(self.list):
             yield x
 
 
 class PathResourceDescriptor(ResourceDescriptor, abc.ABC):
 
     def __init__(self, path):
-        super().__init__()
+        ResourceDescriptor.__init__(self)
         self.path = path
 
     def __str__(self):
@@ -171,25 +216,31 @@ class PathResourceDescriptor(ResourceDescriptor, abc.ABC):
         return str(self.path)
 
     def parent(self):
-        return self.__class__(self.path.parent)
+        return self._create_descriptor(self.path.parent)
 
     def child(self, child):
-        return self.__class__(self.path / child)
+        return self._create_descriptor(self.path.parent / child)
 
     def basename(self):
         return self.path.name
 
 
-class UriResourceDescriptor(ResourceDescriptor, abc.ABC):
+class UriResourceDescriptor(PathResourceDescriptor, abc.ABC):
 
     def __init__(self, uri):
-        super().__init__()
         self.uri = uri
         p = urlsplit(self.uri)
         self.hostname = p.hostname
         self.port = p.port
         self.scheme = p.scheme
-        self.path = p.path[1:]
+        PathResourceDescriptor.__init__(self, pathlib.PurePosixPath(p.path))
+
+    def _path_to_uri(self, path):
+        return "{}://{}/{}".format(
+            self.scheme,
+            self.hostname if self.port is None else "{}:{}".format(self.hostname, self.port),
+            str(path).lstrip("/")
+        )
 
     def __str__(self):
         return str(self.uri)
@@ -197,11 +248,8 @@ class UriResourceDescriptor(ResourceDescriptor, abc.ABC):
     def __repr__(self):
         return str(self.uri)
 
-    def _parent_path(self):
-        p = urlsplit(self.uri)
-        return "{}://{}/{}".format(p.scheme, p.netloc, "/".join(p.path.split("/")[:-1]))
+    def parent(self):
+        return self._create_descriptor(self._path_to_uri(self.path.parent))
 
-    def basename(self):
-        p = urlsplit(self.uri)
-        return p.path.split("/")[-1]
-
+    def child(self, child):
+        return self._create_descriptor(self._path_to_uri(self.path / child))

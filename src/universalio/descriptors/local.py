@@ -59,7 +59,7 @@ class LocalFileReaderContextManager:
 class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
 
     def __init__(self, path):
-        super().__init__(pathlib.Path(path))
+        PathResourceDescriptor.__init__(self, pathlib.Path(path))
 
     @lru_cache(maxsize=None)
     def is_dir(self):
