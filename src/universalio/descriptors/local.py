@@ -73,12 +73,6 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
     def exists(self):
         return self.path.exists()
 
-    def parent(self):
-        return LocalDescriptor(self._parent_path())
-
-    def child(self, child):
-        return LocalDescriptor(self._child_path(child))
-
     def list(self):
         for f in os.scandir(self.path):
             yield LocalDescriptor(f.path)
@@ -89,5 +83,25 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
     def writer(self):
         return LocalFileWriterContextManager(self.path)
 
+    @staticmethod
+    def match_location(location):
+        # Absolute path on mapped drive, e.g. C:\ or linux-flavoured C:/
+        if location[1:3] == ":\\" or location[1:3] == ":/":
+            return True
+        # Absolute path on network, e.g. \\server\fileshare
+        if location[0:2] == r"\\":
+            return True
+        # Absolute paths on posix machines
+        if location[0] == "/":
+            return True
+        # Home paths
+        if location[0] == "~":
+            return True
+        if "://" in location:
+            return False
+        # TODO: Should we consider relative paths? Maybe as a fallback?
+        return False
 
-
+    @staticmethod
+    def create_from_location(location: str):
+        return LocalDescriptor(pathlib.Path(location).absolute())

@@ -1,8 +1,5 @@
 import asyncssh
-import asyncio
-import atexit
 import hashlib
-from autoinject import injector
 from functools import lru_cache
 from .base import FileWriter, FileReader, UriResourceDescriptor, AsynchronousDescriptor, ConnectionRegistry
 from universalio import GlobalLoopContext
@@ -78,5 +75,10 @@ class SFTPDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
     def writer(self):
         pass
 
+    @staticmethod
+    def match_location(location):
+        return location.lower().startswith("sftp://")
 
-
+    @staticmethod
+    def create_from_location(location: str):
+        return SFTPDescriptor(location)

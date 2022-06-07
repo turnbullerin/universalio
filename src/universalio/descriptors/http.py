@@ -85,3 +85,4 @@ class HttpDescriptor(UriResourceDescriptor):
 
     def writer(self):
         pass
+

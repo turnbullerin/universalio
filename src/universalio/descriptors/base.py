@@ -129,7 +129,7 @@ class ResourceDescriptor(abc.ABC):
         return self.__class__(*args, **kwargs)
 
     def copy_all_to(self, target_dir, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE, recursive=False):
-        asyncio.gather(self.copy_all_to_async(target_dir, allow_overwrite, chunk_size, recursive, await_completion=True))
+        self.loop.run(self.copy_all_to_async(target_dir, allow_overwrite, chunk_size, recursive, await_completion=True))
 
     async def copy_all_to_async(self, target_dir, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE, recursive=False, await_completion=False):
         if not await self.is_dir_async():
@@ -151,11 +151,11 @@ class ResourceDescriptor(abc.ABC):
     def copy_from(self, source_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
         self.loop.run(self.copy_from_async(source_resource, allow_overwrite, chunk_size))
 
-    async def copy_from_async(self, source_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
-        await source_resource.copy_to_async(self, allow_overwrite, chunk_size)
-
     def copy_to(self, target_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
         self.loop.run(self.copy_from_async(target_resource, allow_overwrite, chunk_size))
+
+    async def copy_from_async(self, source_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
+        await source_resource.copy_to_async(self, allow_overwrite, chunk_size)
 
     async def copy_to_async(self, target_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
         if not await self.is_file_async():
@@ -219,7 +219,7 @@ class PathResourceDescriptor(ResourceDescriptor, abc.ABC):
         return self._create_descriptor(self.path.parent)
 
     def child(self, child):
-        return self._create_descriptor(self.path.parent / child)
+        return self._create_descriptor(self.path / child)
 
     def basename(self):
         return self.path.name

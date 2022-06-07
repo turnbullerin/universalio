@@ -212,3 +212,72 @@ class TestSFTPDescriptor(unittest.TestCase):
         self.assertNotIn(pathlib.PurePosixPath("/bar2.txt"), foo_paths)
         self.assertIn(pathlib.PurePosixPath("/foo/barsub"), foo_paths)
         self.assertNotIn(pathlib.PurePosixPath("/bar/foo3.txt"), foo_paths)
+
+    def test_parent(self):
+        d = TestSFTPDescriptor.server_root
+        d1 = d / "foo"
+        d1.mkdir()
+        d2 = d1 / "bar"
+        d2.mkdir()
+        f1 = d2 / "foo2.txt"
+        with open(f1, "w") as h:
+            h.write("I am the very model of a modern major general")
+        fd = SFTPDescriptor("sftp://localhost:3373/foo/bar/foo2.txt", "admin", "admin")
+        self.assertTrue(fd.is_file())
+        self.assertTrue(fd.exists())
+        parent1 = fd.parent()
+        self.assertIsInstance(parent1, SFTPDescriptor)
+        self.assertTrue(parent1.is_dir())
+        self.assertEqual(parent1.path, pathlib.PurePosixPath("/foo/bar"))
+        parent2 = parent1.parent()
+        self.assertIsInstance(parent2, SFTPDescriptor)
+        self.assertTrue(parent2.is_dir())
+        self.assertEqual(parent2.path, pathlib.PurePosixPath("/foo"))
+        parent3 = parent2.parent()
+        self.assertIsInstance(parent3, SFTPDescriptor)
+        self.assertTrue(parent3.is_dir())
+        self.assertEqual(parent3.path, pathlib.PurePosixPath("/"))
+        parent4 = parent3.parent()
+        self.assertIsInstance(parent4, SFTPDescriptor)
+        self.assertTrue(parent4.is_dir())
+        self.assertEqual(parent4.path, pathlib.PurePosixPath("/"))
+
+    def test_child(self):
+        d = TestSFTPDescriptor.server_root
+        d1 = d / "foo"
+        d1.mkdir()
+        d2 = d1 / "bar"
+        d2.mkdir()
+        f1 = d2 / "foo2.txt"
+        with open(f1, "w") as h:
+            h.write("I am the very model of a modern major general")
+        fd = SFTPDescriptor("sftp://localhost:3373/", "admin", "admin")
+        self.assertTrue(fd.is_dir())
+        self.assertTrue(fd.exists())
+        child1 = fd.child("foo")
+        self.assertIsInstance(child1, SFTPDescriptor)
+        self.assertTrue(child1.is_dir())
+        self.assertEqual(child1.path, pathlib.PurePosixPath("/foo"))
+        child2 = child1.child("bar")
+        self.assertIsInstance(child2, SFTPDescriptor)
+        self.assertTrue(child2.is_dir())
+        self.assertEqual(child2.path, pathlib.PurePosixPath("/foo/bar"))
+        child3 = child2.child("foo2.txt")
+        self.assertIsInstance(child3, SFTPDescriptor)
+        self.assertTrue(child3.is_file())
+        self.assertEqual(child3.path, pathlib.PurePosixPath("/foo/bar/foo2.txt"))
+        child4 = child2.child("fake.txt")
+        self.assertIsInstance(child4, SFTPDescriptor)
+        self.assertEqual(child4.path, pathlib.PurePosixPath("/foo/bar/fake.txt"))
+        self.assertFalse(child4.exists())
+
+    def test_match_location(self):
+        self.assertFalse(SFTPDescriptor.match_location(r"C:\test\file.txt"))
+        self.assertFalse(SFTPDescriptor.match_location(r"\\server\test\file.txt"))
+        self.assertFalse(SFTPDescriptor.match_location(r"/var/test/file"))
+        self.assertFalse(SFTPDescriptor.match_location(r"~/.ssh/config"))
+        self.assertTrue(SFTPDescriptor.match_location(r"sftp://server/file"))
+        self.assertFalse(SFTPDescriptor.match_location(r"http://server/file"))
+        self.assertFalse(SFTPDescriptor.match_location(r"https://server/file"))
+        self.assertFalse(SFTPDescriptor.match_location(r"ftps://server/file"))
+        self.assertFalse(SFTPDescriptor.match_location(r"ftp://server/file"))

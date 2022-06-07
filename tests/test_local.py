@@ -43,6 +43,66 @@ class TestLocalDescriptor(unittest.TestCase):
             sd.mkdir()
             self.assertFalse(LocalDescriptor(sd).is_file())
 
+    def test_parent(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = pathlib.Path(d)
+            sd = d / "foo"
+            sd.mkdir()
+            sd2 = sd / "bar"
+            sd2.mkdir()
+            f = sd2 / "test.txt"
+            with open(f, "w") as h:
+                h.write("I am the very model of a modern major general")
+            fd = LocalDescriptor(f)
+            self.assertTrue(fd.is_file())
+            parent1 = fd.parent()
+            self.assertIsInstance(parent1, LocalDescriptor)
+            self.assertTrue(parent1.is_dir())
+            self.assertEqual(parent1.path, sd2)
+            parent2 = parent1.parent()
+            self.assertIsInstance(parent2, LocalDescriptor)
+            self.assertTrue(parent2.is_dir())
+            self.assertEqual(parent2.path, sd)
+            last = d
+            test = d.parent
+            while not str(last) == str(test):
+                last = test
+                test = last.parent
+            fd2 = LocalDescriptor(test)
+            parent3 = fd2.parent()
+            self.assertIsInstance(parent3, LocalDescriptor)
+            self.assertTrue(parent3.is_dir())
+            self.assertEqual(parent3.path, test)
+
+    def test_child(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = pathlib.Path(d)
+            sd = d / "foo"
+            sd.mkdir()
+            sd2 = sd / "bar"
+            sd2.mkdir()
+            f = sd2 / "test.txt"
+            with open(f, "w") as h:
+                h.write("I am the very model of a modern major general")
+            fd = LocalDescriptor(d)
+            self.assertTrue(d.is_dir())
+            child1 = fd.child("foo")
+            self.assertIsInstance(child1, LocalDescriptor)
+            self.assertTrue(child1.is_dir())
+            self.assertEqual(child1.path, sd)
+            child2 = child1.child("bar")
+            self.assertIsInstance(child2, LocalDescriptor)
+            self.assertTrue(child2.is_dir())
+            self.assertEqual(child2.path, sd2)
+            child3 = child2.child("test.txt")
+            self.assertIsInstance(child3, LocalDescriptor)
+            self.assertTrue(child3.is_file())
+            self.assertEqual(child3.path, f)
+            child4 = child2.child("fake.txt")
+            self.assertIsInstance(child4, LocalDescriptor)
+            self.assertFalse(child4.exists())
+            self.assertEqual(child4.path, sd2 / "fake.txt")
+
     def test_exists(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertTrue(LocalDescriptor(d).exists())
@@ -154,3 +214,15 @@ class TestLocalDescriptor(unittest.TestCase):
             self.assertIn(f2, paths)
             self.assertNotIn(dsub, paths)
             self.assertNotIn(fsub, paths)
+
+    def test_match_location(self):
+        self.assertTrue(LocalDescriptor.match_location(r"C:\test\file.txt"))
+        self.assertTrue(LocalDescriptor.match_location(r"\\server\test\file.txt"))
+        self.assertTrue(LocalDescriptor.match_location(r"/var/test/file"))
+        self.assertTrue(LocalDescriptor.match_location(r"~/.ssh/config"))
+        self.assertFalse(LocalDescriptor.match_location(r"sftp://server/file"))
+        self.assertFalse(LocalDescriptor.match_location(r"http://server/file"))
+        self.assertFalse(LocalDescriptor.match_location(r"https://server/file"))
+        self.assertFalse(LocalDescriptor.match_location(r"ftps://server/file"))
+        self.assertFalse(LocalDescriptor.match_location(r"ftp://server/file"))
+
