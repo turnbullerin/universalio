@@ -58,6 +58,6 @@ Asynchronous versions of most of the above exist with the suffix _async
 - Support for writing text directly
 - More direct support for file copy/moving if the descriptor and connection is the same
 - Considering support for SSH/SCP
-- Considering support for relative file paths on local/network drives
+- Considering support for relative file paths on local/network drives (challenging to understand what the root would be?)
 - Considering support for chmod/etc (but not supported on Windows)
 - Considering support for symbolic link creation (but complex on Windows)

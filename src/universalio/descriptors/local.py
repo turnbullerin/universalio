@@ -81,7 +81,6 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
             return True
         if "://" in location:
             return False
-        # TODO: Should we consider relative paths? Maybe as a fallback?
         return False
 
     @staticmethod
