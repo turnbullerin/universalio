@@ -20,6 +20,7 @@ non-asynchronous methods are available as well.
 - parent()
 - child(child_name)
 - basename()
+- remove()
 - read(block_size)
 - write(bytes)
 - text(encoding)
@@ -52,7 +53,7 @@ Asynchronous versions of most of the above exist with the suffix _async
 - Support for pathlib-style with_name() to change the file name
 - Support for file metadata via stat
 - Support for mkdir() and rmdir() as well as recursive rmdir() and recursive mkdir()
-- Support for file renaming, removing
+- Support for file renaming
 - Support for touch()
 - Support for writing text directly
 - More direct support for file copy/moving if the descriptor and connection is the same
