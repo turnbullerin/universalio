@@ -138,7 +138,14 @@ class ResourceDescriptor(abc.ABC):
     async def list_async(self):
         pass
 
-    def text(self, encoding="utf-8"):
+    def detect_encoding(self):
+        return self.loop.run(self.detect_encoding_async())
+
+    async def detect_encoding_async(self):
+        return "utf-8"
+
+    def text(self, encoding=None):
+        encoding = encoding or self.detect_encoding()
         return self.read().decode(encoding)
 
     def read(self):

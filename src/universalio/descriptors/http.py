@@ -1,88 +1,130 @@
-import pathlib
 import aiohttp
-import requests
-from .base import FileWriter, FileReader, UriResourceDescriptor
+import atexit
+from autoinject import injector
+from .base import FileWriter, FileReader, UriResourceDescriptor, AsynchronousDescriptor, ConnectionRegistry
 
 
-class LocalFileWriterContextManager:
+class HttpWriterContextManager:
 
     class Writer(FileWriter):
 
-        def __init__(self, handle):
-            super().__init__()
-            self.handle = handle
+        def __init__(self, session, path):
+            super().__init__(session)
+            self.path = path
+            self._buffer = None
 
-        async def write(self, chunk):
-            await self.handle.write(chunk)
+        def write(self, chunk):
+            if self._buffer is None:
+                self._buffer = chunk
+            else:
+                self._buffer += chunk
 
-    def __init__(self, path):
-        self.path = path
-        self._handle = None
+        def finalize(self):
+            async with self.handle.put(self.path, self._buffer) as resp:
+                pass
+            self._buffer = None
+
+    def __init__(self, uri, session):
+        self.uri = uri
+        self.session = session
+        self._writer = None
 
     async def __aenter__(self):
-        self._handle = await aiofiles.open(self.path, "wb")
-        return LocalFileReaderContextManager.Reader(self._handle)
+        self._writer = HttpWriterContextManager.Writer(self.session, self.uri)
+        return self._writer
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self._handle.close()
+        if exc_type is None:
+            self._writer.finalize()
 
 
-class LocalFileReaderContextManager:
+class HttpReaderContextManager:
 
     class Reader(FileReader):
 
-        def __init__(self, handle):
-            super().__init__()
-            self.handle = handle
-
-        async def read(self, chunk_size=1048576):
-            chunk = await self.handle.read(chunk_size)
-            while chunk:
+        def read(self, chunk_size=None):
+            chunk_size = chunk_size or self.chunk_size
+            async for chunk in self.handle.iter_chunked(chunk_size):
                 yield chunk
-                chunk = await self.handle.read(chunk_size)
 
-    def __init__(self, path):
-        self.path = path
+    def __init__(self, uri, session):
+        self.uri = uri
+        self.session = session
         self._handle = None
+        self._get = None
 
     async def __aenter__(self):
-        self._handle = await aiofiles.open(self.path, "rb")
-        return LocalFileReaderContextManager.Reader(self._handle)
+        self._get = await self.session.get(self.uri)
+        self._handle = await self._get.__aenter__()
+        return HttpReaderContextManager.Reader(self._handle)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self._handle.close()
+        self._get.__aexit__(exc_type, exc_val, exc_tb)
 
 
-class HttpDescriptor(UriResourceDescriptor):
+@injector.injectable
+class HttpSessionRegistry:
 
+    def __init__(self):
+        self.session = aiohttp.ClientSession()
+        atexit.register(HttpSessionRegistry.exit, self)
+
+    def exit(self):
+        self.session.close()
+
+    def __getattr__(self, item):
+        return getattr(self.session, item)
+
+
+class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
+
+    session: HttpSessionRegistry = None
+
+    @injector.construct
     def __init__(self, uri):
         super().__init__(uri)
 
-    def is_dir(self):
+    async def canonical(self):
+        async with self.session.head(self.uri) as response:
+            if response.status in [301]:
+                return self._create_descriptor(response.headers.get("Location")).canonical()
+        return self
+
+    async def detect_encoding_async(self):
+        async with self.session.head(self.uri) as response:
+            response.raise_for_status()
+            if "Content-Type" in response.headers:
+                h = response.headers.get("Content-Type")
+                if "charset=" in h:
+                    p = h.find("charset=") + 8
+                    if ";" in h[p:]:
+                        return h[p:h.find(";", p)]
+                    else:
+                        return h[p:]
+        return await super().detect_encoding_async()
+
+    async def is_dir_async(self):
+        # By convention
         return self.uri.endswith("/")
 
-    def is_file(self):
+    async def is_file_async(self):
+        # By convention
         return not self.uri.endswith("/")
 
-    def exists(self):
-        resp = requests.head(self.uri)
-        return resp.status_code == 200
-
     async def exists_async(self):
-        pass
+        async with self.session.head(self.uri) as response:
+            response.raise_for_status()
+            return True
 
-    def parent(self):
-        pass
+    async def list_async(self):
+        return []
 
-    def child(self, child):
-        pass
-
-    def list(self):
-        pass
+    async def remove_async(self):
+        async with self.session.delete(self.uri) as response:
+            response.raise_for_status()
 
     def reader(self):
-        pass
+        return HttpReaderContextManager(self.uri, self.session)
 
     def writer(self):
-        pass
-
+        return HttpWriterContextManager(self.uri, self.session)
