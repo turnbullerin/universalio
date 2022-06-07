@@ -7,16 +7,7 @@ import os
 from .base import FileWriter, FileReader, PathResourceDescriptor, SynchronousDescriptor
 
 
-class LocalFileWriterContextManager:
-
-    class Writer(FileWriter):
-
-        def __init__(self, handle):
-            super().__init__()
-            self.handle = handle
-
-        async def write_chunk(self, chunk):
-            await self.handle.write(chunk)
+class _LocalFileWriterContextManager:
 
     def __init__(self, path):
         self.path = path
@@ -24,33 +15,22 @@ class LocalFileWriterContextManager:
 
     async def __aenter__(self):
         self._handle = await aiofiles.open(self.path, "wb")
-        return LocalFileWriterContextManager.Writer(self._handle)
+        return FileWriter(self._handle)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self._handle.close()
 
 
-class LocalFileReaderContextManager:
+class _LocalFileReaderContextManager:
 
-    class Reader(FileReader):
-
-        def __init__(self, handle):
-            super().__init__()
-            self.handle = handle
-
-        async def chunks(self, chunk_size=1048576):
-            chunk = await self.handle.read(chunk_size)
-            while chunk:
-                yield chunk
-                chunk = await self.handle.read(chunk_size)
-
-    def __init__(self, path):
+    def __init__(self, path, chunk_size=None):
         self.path = path
+        self.chunk_size = chunk_size
         self._handle = None
 
     async def __aenter__(self):
         self._handle = await aiofiles.open(self.path, "rb")
-        return LocalFileReaderContextManager.Reader(self._handle)
+        return FileReader(self._handle, self.chunk_size)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self._handle.close()
@@ -72,15 +52,18 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
     def exists(self):
         return self.path.exists()
 
+    def remove(self):
+        return self.path.unlink()
+
     def list(self):
         for f in os.scandir(self.path):
             yield LocalDescriptor(f.path)
 
-    def reader(self):
-        return LocalFileReaderContextManager(self.path)
+    def reader(self, chunk_size=None):
+        return _LocalFileReaderContextManager(self.path, chunk_size)
 
     def writer(self):
-        return LocalFileWriterContextManager(self.path)
+        return _LocalFileWriterContextManager(self.path)
 
     @staticmethod
     def match_location(location):

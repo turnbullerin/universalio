@@ -12,7 +12,7 @@ class LocalFileWriterContextManager:
             super().__init__()
             self.handle = handle
 
-        async def write_chunk(self, chunk):
+        async def write(self, chunk):
             await self.handle.write(chunk)
 
     def __init__(self, path):
@@ -35,7 +35,7 @@ class LocalFileReaderContextManager:
             super().__init__()
             self.handle = handle
 
-        async def chunks(self, chunk_size=1048576):
+        async def read(self, chunk_size=1048576):
             chunk = await self.handle.read(chunk_size)
             while chunk:
                 yield chunk

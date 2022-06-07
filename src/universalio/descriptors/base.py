@@ -6,7 +6,7 @@ from autoinject import injector
 import atexit
 from universalio import GlobalLoopContext
 
-DEFAULT_CHUNK_SIZE = 1048576
+DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024
 
 
 class ConnectionRegistry(abc.ABC):
@@ -45,24 +45,29 @@ class ConnectionRegistry(abc.ABC):
         pass
 
 
-class FileReader(abc.ABC):
+class FileReader:
 
-    def __init__(self):
-        pass
+    def __init__(self, handle=None, chunk_size=None):
+        super().__init__()
+        self.handle = handle
+        self.chunk_size = chunk_size if chunk_size else DEFAULT_CHUNK_SIZE
 
-    @abc.abstractmethod
-    async def chunks(self, chunk_size=DEFAULT_CHUNK_SIZE):
-        pass
+    async def read(self, chunk_size=None):
+        chunk_size = chunk_size or self.chunk_size
+        chunk = await self.handle.read(chunk_size)
+        while chunk:
+            yield chunk
+            chunk = await self.handle.read(chunk_size)
 
 
-class FileWriter(abc.ABC):
+class FileWriter:
 
-    def __init__(self):
-        pass
+    def __init__(self, handle=None):
+        super().__init__()
+        self.handle = handle
 
-    @abc.abstractmethod
-    async def write_chunk(self, chunk):
-        pass
+    async def write(self, chunk):
+        await self.handle.write(chunk)
 
 
 class ResourceDescriptor(abc.ABC):
@@ -79,6 +84,10 @@ class ResourceDescriptor(abc.ABC):
 
     @abc.abstractmethod
     def exists(self):
+        pass
+
+    @abc.abstractmethod
+    def remove(self):
         pass
 
     @abc.abstractmethod
@@ -118,6 +127,10 @@ class ResourceDescriptor(abc.ABC):
         pass
 
     @abc.abstractmethod
+    async def remove_async(self):
+        pass
+
+    @abc.abstractmethod
     async def exists_async(self):
         pass
 
@@ -136,12 +149,12 @@ class ResourceDescriptor(abc.ABC):
 
     async def write_async(self, data):
         async with self.writer() as h:
-            await h.write_chunk(data)
+            await h.write(data)
 
     async def read_async(self):
         byts = None
         async with self.reader() as h:
-            async for x in h.chunks():
+            async for x in h.read():
                 if byts is None:
                     byts = x
                 else:
@@ -190,8 +203,8 @@ class ResourceDescriptor(abc.ABC):
     async def _do_copy_async(self, target_resource, chunk_size=DEFAULT_CHUNK_SIZE):
         async with self.reader() as reader:
             async with target_resource.writer() as writer:
-                async for chunk in reader.chunks(chunk_size):
-                    await writer.write_chunk(chunk)
+                async for chunk in reader.read(chunk_size):
+                    await writer.write(chunk)
 
 
 class AsynchronousDescriptor(ResourceDescriptor, abc.ABC):
@@ -209,6 +222,9 @@ class AsynchronousDescriptor(ResourceDescriptor, abc.ABC):
         for f in self.loop.run(self.list_async()):
             yield f
 
+    def remove(self):
+        return self.loop.run(self.remove_async())
+
 
 class SynchronousDescriptor(ResourceDescriptor, abc.ABC):
 
@@ -224,6 +240,9 @@ class SynchronousDescriptor(ResourceDescriptor, abc.ABC):
     async def list_async(self):
         for x in await self.loop.execute(self.list):
             yield x
+
+    async def remove_async(self):
+        return await self.loop.execute(self.remove)
 
 
 class PathResourceDescriptor(ResourceDescriptor, abc.ABC):

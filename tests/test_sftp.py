@@ -260,3 +260,18 @@ class TestSFTPDescriptor(unittest.TestCase):
         fd.copy_to(ld)
         self.assertTrue(ld.exists())
         self.assertEqual(ld.text("utf-8"), pirate_king)
+
+    def test_remove(self):
+        pirate_king = """I am the very model of a modern major general\nI've information vegetable, animal, and mineral"""
+        d = TestSFTPDescriptor.server_root
+        sd = pathlib.Path(d) / "foo"
+        sd.mkdir()
+        f = sd / "test.txt"
+        with open(f, "wb") as h:
+            h.write(pirate_king.encode("utf-8"))
+        fd2 = SFTPDescriptor(r"sftp://localhost:3373/foo/test.txt", "admin")
+        self.assertTrue(fd2.exists())
+        self.assertTrue(f.exists())
+        fd2.remove()
+        self.assertFalse(fd2.exists())
+        self.assertFalse(f.exists())

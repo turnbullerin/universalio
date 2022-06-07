@@ -247,3 +247,21 @@ class TestLocalDescriptor(unittest.TestCase):
         self.assertFalse(LocalDescriptor.match_location(r"ftps://server/file"))
         self.assertFalse(LocalDescriptor.match_location(r"ftp://server/file"))
 
+    def test_remove(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = pathlib.Path(d)
+            d1 = d / "foo"
+            d1.mkdir()
+            d2 = d / "bar"
+            d2.mkdir()
+            f1 = d / "foo2.txt"
+            with open(f1, "w") as h:
+                h.write("I am the very model of a modern major general")
+            fd2 = LocalDescriptor(d2)
+            self.assertRaises(PermissionError, fd2.remove)
+            fd = LocalDescriptor(f1)
+            self.assertTrue(fd.exists())
+            self.assertTrue(f1.exists())
+            fd.remove()
+            self.assertFalse(fd.exists())
+            self.assertFalse(f1.exists())
