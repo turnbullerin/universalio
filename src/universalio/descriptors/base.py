@@ -1,6 +1,6 @@
 import abc
 import pathlib
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, quote_plus
 import asyncio
 from autoinject import injector
 import atexit
@@ -129,7 +129,7 @@ class ResourceDescriptor(abc.ABC):
         return self.read().decode(encoding)
 
     def read(self):
-       return self.loop.run(self.read_async())
+        return self.loop.run(self.read_async())
 
     def write(self, data):
         return self.loop.run(self.write_async(data))
@@ -163,12 +163,12 @@ class ResourceDescriptor(abc.ABC):
             src, trg = work.pop()
             async for file in src.list_async():
                 if await file.is_file():
-                    tasks.append(asyncio.create_task(self.copy_from_async(file, trg.child(file.basename()))))
+                    tasks.append(asyncio.create_task(file.copy_to_async(trg.child(file.basename()), allow_overwrite, chunk_size)))
                 else:
                     work.append((file, trg.child(file.basename())))
         if await_completion:
             await asyncio.gather(*tasks)
-            return None
+            return []
         return tasks
 
     def copy_from(self, source_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
@@ -250,19 +250,29 @@ class PathResourceDescriptor(ResourceDescriptor, abc.ABC):
 
 class UriResourceDescriptor(PathResourceDescriptor, abc.ABC):
 
-    def __init__(self, uri):
+    def __init__(self, uri, top_path_special=False):
         self.uri = uri
         p = urlsplit(self.uri)
         self.hostname = p.hostname
         self.port = p.port
         self.scheme = p.scheme
-        PathResourceDescriptor.__init__(self, pathlib.PurePosixPath(p.path))
+        self.container = None
+        pieces = [x for x in str(p.path).split("/") if x.strip() != ""]
+        if top_path_special:
+            self.container = pieces[0]
+            PathResourceDescriptor.__init__(self, pathlib.PurePosixPath("/{}".format("/".join(pieces[1:]))))
+        else:
+            PathResourceDescriptor.__init__(self, pathlib.PurePosixPath("/{}".format("/".join(pieces))))
 
     def _path_to_uri(self, path):
+        pieces = []
+        if self.container:
+            pieces.append(self.container)
+        pieces.extend([x for x in str(path).split("/") if not x == ""])
         return "{}://{}/{}".format(
             self.scheme,
             self.hostname if self.port is None else "{}:{}".format(self.hostname, self.port),
-            str(path).lstrip("/")
+            "/".join([quote_plus(p) for p in pieces])
         )
 
     def __str__(self):
