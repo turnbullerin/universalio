@@ -126,3 +126,15 @@ class TestSFTPDescriptor(unittest.TestCase):
         self.assertFalse(child4.exists())
         self.assertFalse(child4.is_file())
         self.assertFalse(child4.is_dir())
+
+    def test_rw_rem_chain(self):
+        if not self._check_azure_credentials():
+            return
+        blob = self._blob("/")
+        file = blob.child("test_file.txt")
+        if file.exists():
+            file.remove()
+        self.assertFalse(file.exists())
+        file.write("I am the very model of a modern major general".encode("utf-8"))
+        self.assertTrue(file.exists())
+        self.assertEqual("I am the very model of a modern major general", file.text("utf-8"))

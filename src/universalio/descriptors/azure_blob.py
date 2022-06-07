@@ -5,69 +5,99 @@ from universalio import GlobalLoopContext
 from autoinject import injector
 import azure.storage.blob.aio as asb
 from urllib.parse import urlparse
+import asyncio
+
+AZURE_BLOB_UPLOAD_BUFFER = 5 * 1024 * 1024
 
 
-class SFTPWriterContextManager:
+class _AzureBlobWriterContextManager:
 
-    class Writer(FileWriter):
+    class BlobWriter(FileWriter):
 
-        def __init__(self, handle):
-            super().__init__()
-            self.handle = handle
+        def __init__(self, handle, buffer_chunk_size=None):
+            super().__init__(handle)
+            self.id = 1
+            self.block_ids = []
+            self.tasks = []
+            self.buffer_chunk_size = buffer_chunk_size or AZURE_BLOB_UPLOAD_BUFFER
+            self._buffer = None
 
-        async def write_chunk(self, chunk):
-            await self.handle.write(chunk)
+        async def write(self, chunk):
+            self._buffer = chunk if self._buffer is None else self._buffer + chunk
+            if self.buffer_chunk_size:
+                while len(self._buffer) >= self.buffer_chunk_size:
+                    await self._write(self._buffer[0:self.buffer_chunk_size])
+                    self._buffer = self._buffer[self.buffer_chunk_size:]
+            else:
+                await self._write(self._buffer)
+                self._buffer = None
 
-    def __init__(self, connection, path):
-        self.conn = connection
-        self.path = path
-        self._connection = None
-        self._client = None
+        async def _write(self, chunk):
+            blob_id = None
+            async with asyncio.Lock():
+                blob_id = "{:064X}".format(self.id)
+                self.id += 1
+            self.block_ids.append(blob_id)
+            self.tasks.append(asyncio.create_task(self.handle.stage_block(
+                blob_id,
+                chunk,
+                len(chunk)
+            )))
+
+        async def finalize(self):
+            if self._buffer:
+                await self._write(self._buffer)
+                self._buffer = None
+            await asyncio.gather(*self.tasks)
+            await self.handle.commit_block_list(self.block_ids)
+
+    def __init__(self, blob_client):
+        if blob_client is None:
+            raise ValueError("Cannot write to a directory")
+        self.client = blob_client
         self._handle = None
 
     async def __aenter__(self):
-        self._connection = await self.conn
-        self._client = await self._connection.start_sftp_client()
-        self._cm = self._client.open(str(self.path), "wb")
-        self._handle = await self._cm.__aenter__()
-        return SFTPWriterContextManager.Writer(self._handle)
+        self._real_client = await self.client
+        self._handle = _AzureBlobWriterContextManager.BlobWriter(self._real_client)
+        return self._handle
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self._cm.__aexit__(exc_type, exc_val, exc_tb)
-        self._client.exit()
+        if exc_type is None:
+            await self._handle.finalize()
+        self._real_client = None
+        self._handle = None
 
 
-class SFTPReaderContextManager:
+class _AzureBlobReaderContextManager:
 
-    class Reader(FileReader):
+    class BlobReader(FileReader):
 
-        def __init__(self, handle):
-            super().__init__()
-            self.handle = handle
-
-        async def chunks(self, chunk_size=1048576):
-            chunk = await self.handle.read(chunk_size)
-            while chunk:
+        async def read(self, chunk_size=None):
+            async for chunk in self.handle.chunks():
                 yield chunk
-                chunk = await self.handle.read(chunk_size)
 
-    def __init__(self, connection, path):
-        self.conn = connection
-        self.path = path
-        self._connection = None
-        self._client = None
-        self._handle = None
+    def __init__(self, blob_client, chunk_size=None):
+        if blob_client is None:
+            raise ValueError("Cannot read from a directory")
+        self.client = blob_client
+        self.chunk_size = chunk_size
+        self._real_client = None
+        self._stream = None
 
     async def __aenter__(self):
-        self._connection = await self.conn
-        self._client = await self._connection.start_sftp_client()
-        self._cm = self._client.open(str(self.path), "rb")
-        self._handle = await self._cm.__aenter__()
-        return SFTPReaderContextManager.Reader(self._handle)
+        kwargs = {}
+        self._real_client = await self.client
+        if self.chunk_size:
+            kwargs["config"] = {
+                "max_chunk_get_size": int(self.chunk_size)
+            }
+        self._stream = await self._real_client.download_blob(**kwargs)
+        return _AzureBlobReaderContextManager.BlobReader(self._stream)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self._cm.__aexit__(exc_type, exc_val, exc_tb)
-        self._client.exit()
+        self._real_client = None
+        self._stream = None
 
 
 @injector.injectable
@@ -104,12 +134,18 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         conn = await self._connect()
         path = str(self.path)[1:]
         if path == "":
-            return conn.get_container_client(self.container)
+            return None
         return conn.get_blob_client(self.container, path)
+
+    async def remove_async(self):
+        blob = await self._get_blob_client()
+        if blob is None:
+            raise ValueError("Cannot remove container")
+        return await blob.delete_blob("include")
 
     async def is_dir_async(self):
         blob = await self._get_blob_client()
-        if isinstance(blob, asb.ContainerClient):
+        if blob is None:
             return True
         if await blob.exists():
             return False
@@ -117,7 +153,7 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
 
     async def is_file_async(self):
         blob = await self._get_blob_client()
-        if isinstance(blob, asb.ContainerClient):
+        if blob is None:
             return False
         return await blob.exists()
 
@@ -150,11 +186,11 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
     def _create_descriptor(self, *args, **kwargs):
         return AzureBlobDescriptor(*args, connect_str=self.connect_str, **kwargs)
 
-    def reader(self):
-        return None
+    def reader(self, chunk_size=None):
+        return _AzureBlobReaderContextManager(self._get_blob_client(), chunk_size)
 
     def writer(self):
-        return None
+        return _AzureBlobWriterContextManager(self._get_blob_client())
 
     @staticmethod
     def match_location(location):
