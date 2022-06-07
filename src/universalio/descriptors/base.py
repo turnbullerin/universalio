@@ -175,7 +175,7 @@ class ResourceDescriptor(abc.ABC):
         self.loop.run(self.copy_from_async(source_resource, allow_overwrite, chunk_size))
 
     def copy_to(self, target_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
-        self.loop.run(self.copy_from_async(target_resource, allow_overwrite, chunk_size))
+        self.loop.run(self.copy_to_async(target_resource, allow_overwrite, chunk_size))
 
     async def copy_from_async(self, source_resource, allow_overwrite=False, chunk_size=DEFAULT_CHUNK_SIZE):
         await source_resource.copy_to_async(self, allow_overwrite, chunk_size)

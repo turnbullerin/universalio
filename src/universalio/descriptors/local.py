@@ -69,7 +69,6 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
     def is_file(self):
         return self.path.is_file()
 
-    @lru_cache(maxsize=None)
     def exists(self):
         return self.path.exists()
 

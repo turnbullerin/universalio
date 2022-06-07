@@ -27,11 +27,12 @@ class SFTPWriterContextManager:
     async def __aenter__(self):
         self._connection = await self.conn
         self._client = await self._connection.start_sftp_client()
-        self._handle = self._client.open(str(self.path), "wb")
+        self._cm = self._client.open(str(self.path), "wb")
+        self._handle = await self._cm.__aenter__()
         return SFTPWriterContextManager.Writer(self._handle)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self._handle.close()
+        await self._cm.__aexit__(exc_type, exc_val, exc_tb)
         self._client.exit()
 
 
@@ -59,11 +60,12 @@ class SFTPReaderContextManager:
     async def __aenter__(self):
         self._connection = await self.conn
         self._client = await self._connection.start_sftp_client()
-        self._handle = self._client.open(str(self.path), "rb")
+        self._cm = self._client.open(str(self.path), "rb")
+        self._handle = await self._cm.__aenter__()
         return SFTPReaderContextManager.Reader(self._handle)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self._handle.close()
+        await self._cm.__aexit__(exc_type, exc_val, exc_tb)
         self._client.exit()
 
 
@@ -121,7 +123,6 @@ class SFTPDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
             async for sftp_name in sftp.scandir(str(self.path)):
                 yield self.child(sftp_name.filename)
 
-    @lru_cache(maxsize=None)
     async def exists_async(self):
         conn = await self._connect()
         async with conn.start_sftp_client() as sftp:

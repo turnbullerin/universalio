@@ -1,12 +1,10 @@
 import unittest
-import asyncio
 import pathlib
 import subprocess
 import shutil
 import os
 import time
-from universalio.descriptors.sftp import _SFTPHostManager
-from universalio.descriptors import SFTPDescriptor
+from universalio.descriptors import SFTPDescriptor, LocalDescriptor
 from universalio import GlobalLoopContext
 from autoinject import injector
 
@@ -281,3 +279,52 @@ class TestSFTPDescriptor(unittest.TestCase):
         self.assertFalse(SFTPDescriptor.match_location(r"https://server/file"))
         self.assertFalse(SFTPDescriptor.match_location(r"ftps://server/file"))
         self.assertFalse(SFTPDescriptor.match_location(r"ftp://server/file"))
+
+    def test_read(self):
+        d = TestSFTPDescriptor.server_root
+        pirate_king = """I am the very model of a modern major general\nI've information vegetable, animal, and mineral"""
+        f = pathlib.Path(d) / "test.txt"
+        with open(f, "wb") as h:
+            h.write(pirate_king.encode("utf-8"))
+        fd = SFTPDescriptor(r"sftp://localhost:3373/test.txt", "admin", "admin")
+        content = fd.text("ascii")
+        self.assertEqual(pirate_king, content)
+
+    def test_write(self):
+        pirate_king = """I am the very model of a modern major general\nI've information vegetable, animal, and mineral"""
+        d = TestSFTPDescriptor.server_root
+        f = pathlib.Path(d) / "test.txt"
+        fd = SFTPDescriptor(r"sftp://localhost:3373/test.txt", "admin", "admin")
+        self.assertFalse(f.exists())
+        fd.write(pirate_king.encode("utf-8"))
+        with open(f, "rb") as h:
+            content = h.read().decode("utf-8")
+            self.assertEqual(content, pirate_king)
+
+    def test_copy_to_upload(self):
+        pirate_king = """I am the very model of a modern major general\nI've information vegetable, animal, and mineral"""
+        d = TestSFTPDescriptor.server_root
+        f = pathlib.Path(d) / "test.txt"
+        with open(f, "wb") as h:
+            h.write(pirate_king.encode("utf-8"))
+        ld = LocalDescriptor(f)
+        fd = SFTPDescriptor(r"sftp://localhost:3373/test2.txt", "admin", "admin")
+        self.assertTrue(ld.exists())
+        self.assertFalse(fd.exists())
+        ld.copy_to(fd)
+        self.assertTrue(fd.exists())
+        self.assertEqual(fd.text("utf-8"), pirate_king)
+
+    def test_copy_to_download(self):
+        pirate_king = """I am the very model of a modern major general\nI've information vegetable, animal, and mineral"""
+        d = TestSFTPDescriptor.server_root
+        f = pathlib.Path(d) / "test.txt"
+        with open(f, "wb") as h:
+            h.write(pirate_king.encode("utf-8"))
+        ld = LocalDescriptor(d / "test2.txt")
+        fd = SFTPDescriptor(r"sftp://localhost:3373/test.txt", "admin", "admin")
+        self.assertTrue(fd.exists())
+        self.assertFalse(ld.exists())
+        fd.copy_to(ld)
+        self.assertTrue(ld.exists())
+        self.assertEqual(ld.text("utf-8"), pirate_king)
