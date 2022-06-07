@@ -74,6 +74,27 @@ class TestLocalDescriptor(unittest.TestCase):
             self.assertTrue(parent3.is_dir())
             self.assertEqual(parent3.path, test)
 
+    def test_read(self):
+        pirate_king = """I am the very model of a modern major general\nI've information vegetable, animal, and mineral"""
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / "test.txt"
+            with open(f, "wb") as h:
+                h.write(pirate_king.encode("utf-8"))
+            fd = LocalDescriptor(f)
+            content = fd.text("ascii")
+            self.assertEqual(pirate_king, content)
+
+    def test_write(self):
+        pirate_king = """I am the very model of a modern major general\nI've information vegetable, animal, and mineral"""
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / "test.txt"
+            fd = LocalDescriptor(f)
+            self.assertFalse(f.exists())
+            fd.write(pirate_king.encode("utf-8"))
+            with open(f, "rb") as h:
+                content = h.read().decode("utf-8")
+                self.assertEqual(content, pirate_king)
+
     def test_child(self):
         with tempfile.TemporaryDirectory() as d:
             d = pathlib.Path(d)

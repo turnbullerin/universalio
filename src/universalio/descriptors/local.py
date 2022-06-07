@@ -24,7 +24,7 @@ class LocalFileWriterContextManager:
 
     async def __aenter__(self):
         self._handle = await aiofiles.open(self.path, "wb")
-        return LocalFileReaderContextManager.Reader(self._handle)
+        return LocalFileWriterContextManager.Writer(self._handle)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self._handle.close()

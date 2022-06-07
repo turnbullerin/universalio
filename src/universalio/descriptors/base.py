@@ -125,6 +125,29 @@ class ResourceDescriptor(abc.ABC):
     async def list_async(self):
         pass
 
+    def text(self, encoding="utf-8"):
+        return self.read().decode(encoding)
+
+    def read(self):
+       return self.loop.run(self.read_async())
+
+    def write(self, data):
+        return self.loop.run(self.write_async(data))
+
+    async def write_async(self, data):
+        async with self.writer() as h:
+            await h.write_chunk(data)
+
+    async def read_async(self):
+        byts = None
+        async with self.reader() as h:
+            async for x in h.chunks():
+                if byts is None:
+                    byts = x
+                else:
+                    byts += x
+        return byts
+
     def _create_descriptor(self, *args, **kwargs):
         return self.__class__(*args, **kwargs)
 

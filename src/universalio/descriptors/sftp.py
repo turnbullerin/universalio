@@ -6,6 +6,67 @@ from universalio import GlobalLoopContext
 from autoinject import injector
 
 
+class SFTPWriterContextManager:
+
+    class Writer(FileWriter):
+
+        def __init__(self, handle):
+            super().__init__()
+            self.handle = handle
+
+        async def write_chunk(self, chunk):
+            await self.handle.write(chunk)
+
+    def __init__(self, connection, path):
+        self.conn = connection
+        self.path = path
+        self._connection = None
+        self._client = None
+        self._handle = None
+
+    async def __aenter__(self):
+        self._connection = await self.conn
+        self._client = await self._connection.start_sftp_client()
+        self._handle = self._client.open(str(self.path), "wb")
+        return SFTPWriterContextManager.Writer(self._handle)
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self._handle.close()
+        self._client.exit()
+
+
+class SFTPReaderContextManager:
+
+    class Reader(FileReader):
+
+        def __init__(self, handle):
+            super().__init__()
+            self.handle = handle
+
+        async def chunks(self, chunk_size=1048576):
+            chunk = await self.handle.read(chunk_size)
+            while chunk:
+                yield chunk
+                chunk = await self.handle.read(chunk_size)
+
+    def __init__(self, connection, path):
+        self.conn = connection
+        self.path = path
+        self._connection = None
+        self._client = None
+        self._handle = None
+
+    async def __aenter__(self):
+        self._connection = await self.conn
+        self._client = await self._connection.start_sftp_client()
+        self._handle = self._client.open(str(self.path), "rb")
+        return SFTPReaderContextManager.Reader(self._handle)
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self._handle.close()
+        self._client.exit()
+
+
 @injector.injectable
 class _SFTPHostManager(ConnectionRegistry):
 
@@ -70,10 +131,10 @@ class SFTPDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         return SFTPDescriptor(*args, username=self.username, password=self.password, **kwargs)
 
     def reader(self):
-        pass
+        return SFTPReaderContextManager(self._connect(), self.path)
 
     def writer(self):
-        pass
+        return SFTPWriterContextManager(self._connect(), self.path)
 
     @staticmethod
     def match_location(location):
