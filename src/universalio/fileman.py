@@ -23,4 +23,13 @@ class FileManager:
         raise ValueError("No descriptor class found for location {}".format(location))
 
 
+class _FileWrapper:
 
+    file_manager: FileManager = None
+
+    @injector.construct
+    def __init__(self):
+        pass
+
+    def __call__(self, location):
+        return self.file_manager.get_descriptor(location)

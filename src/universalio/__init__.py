@@ -1,5 +1,6 @@
 from .global_loop import GlobalLoopContext
 from .fileman import FileManager
+from .fileman import _FileWrapper
 from autoinject import injector as _injector
 
 
@@ -12,7 +13,4 @@ def _setup_file_manager(f: FileManager):
 
 _setup_file_manager()
 
-
-@_injector.inject
-def find_descriptor(location, f: FileManager):
-    return f.get_descriptor(location)
+FileWrapper = _FileWrapper()
