@@ -243,6 +243,18 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         async with self.session.delete(self.uri) as response:
             response.raise_for_status()
 
+    async def mtime_async(self):
+        return None
+
+    async def atime_async(self):
+        return None
+
+    async def ctime_async(self):
+        return None
+
+    async def size_async(self):
+        return None
+
     def reader(self):
         return HttpReaderContextManager(self.uri, self.session)
 

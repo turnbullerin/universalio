@@ -145,6 +145,38 @@ class ResourceDescriptor(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def mtime(self):
+        pass
+
+    @abc.abstractmethod
+    def atime(self):
+        pass
+
+    @abc.abstractmethod
+    def ctime(self):
+        pass
+
+    @abc.abstractmethod
+    def size(self):
+        pass
+
+    @abc.abstractmethod
+    async def mtime_async(self):
+        pass
+
+    @abc.abstractmethod
+    async def atime_async(self):
+        pass
+
+    @abc.abstractmethod
+    async def ctime_async(self):
+        pass
+
+    @abc.abstractmethod
+    async def size_async(self):
+        pass
+
+    @abc.abstractmethod
     async def is_file_async(self):
         pass
 
@@ -167,6 +199,9 @@ class ResourceDescriptor(abc.ABC):
     @abc.abstractmethod
     def joinpath(self, *paths):
         pass
+
+    def __truediv__(self, path):
+        return self.joinpath(path)
 
     @abc.abstractmethod
     async def _do_rmdir_async(self):
@@ -400,6 +435,18 @@ class AsynchronousDescriptor(ResourceDescriptor, abc.ABC):
     def remove(self):
         return self.loop.run(self.remove_async())
 
+    def mtime(self):
+        return self.loop.run(self.mtime_async())
+
+    def atime(self):
+        return self.loop.run(self.atime_async())
+
+    def ctime(self):
+        return self.loop.run(self.ctime_async())
+
+    def size(self):
+        return self.loop.run(self.size_async())
+
 
 class SynchronousDescriptor(ResourceDescriptor, abc.ABC):
 
@@ -418,6 +465,18 @@ class SynchronousDescriptor(ResourceDescriptor, abc.ABC):
 
     async def remove_async(self):
         return await self.loop.execute(self.remove)
+
+    async def mtime_async(self):
+        return await self.loop.execute(self.mtime)
+
+    async def atime_async(self):
+        return await self.loop.execute(self.atime)
+
+    async def ctime_async(self):
+        return await self.loop.execute(self.ctime)
+
+    async def size_async(self):
+        return await self.loop.execute(self.size)
 
 
 class PathResourceDescriptor(ResourceDescriptor, abc.ABC):

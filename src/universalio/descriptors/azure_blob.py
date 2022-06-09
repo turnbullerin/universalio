@@ -205,6 +205,17 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         if not isinstance(target_resource, AzureBlobDescriptor):
             return False
 
+    async def mtime_async(self):
+        return None
+
+    async def atime_async(self):
+        return None
+
+    async def ctime_async(self):
+        return None
+
+    async def size_async(self):
+        return None
 
     @staticmethod
     def match_location(location):

@@ -44,16 +44,29 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
         PathResourceDescriptor.__init__(self, pathlib.Path(path))
 
     def is_dir(self):
-        return self.path.is_dir()
+        return self._cached("is_dir", self.path.is_dir)
 
     def is_file(self):
-        return self.path.is_file()
+        return self._cached("is_file", self.path.is_file)
 
     def exists(self):
-        return self.path.exists()
+        return self._cached("exists", self.path.exists)
 
     def remove(self):
+        self.clear_cache()
         return self.path.unlink()
+
+    def mtime(self):
+        return self._cached("stat", self.path.stat).st_mtime
+
+    def atime(self):
+        return self._cached("stat", self.path.stat).st_atime
+
+    def ctime(self):
+        return self._cached("stat", self.path.stat).st_ctime
+
+    def size(self):
+        return self._cached("stat", self.path.stat).st_size
 
     def list(self):
         for f in os.scandir(self.path):
@@ -66,6 +79,7 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
         return _LocalFileReaderContextManager(self.path, chunk_size)
 
     def writer(self):
+        self.clear_cache()
         return _LocalFileWriterContextManager(self.path)
 
     async def is_local_to(self, target_resource):
