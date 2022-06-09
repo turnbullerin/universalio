@@ -85,13 +85,11 @@ class SFTPDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
     async def _connect(self):
         return await self.host_manager.connect(self.hostname, self.port, self.username, self.password, None)
 
-    @lru_cache(maxsize=None)
     async def is_dir_async(self):
         conn = await self._connect()
         async with conn.start_sftp_client() as sftp:
             return await sftp.isdir(str(self.path))
 
-    @lru_cache(maxsize=None)
     async def is_file_async(self):
         conn = await self._connect()
         async with conn.start_sftp_client() as sftp:
@@ -111,7 +109,7 @@ class SFTPDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
     async def remove_async(self):
         conn = await self._connect()
         async with conn.start_sftp_client() as sftp:
-            return await sftp.remove(str(self.path))
+            await sftp.remove(str(self.path))
 
     def _create_descriptor(self, *args, **kwargs):
         return SFTPDescriptor(*args, username=self.username, password=self.password, **kwargs)
@@ -121,6 +119,31 @@ class SFTPDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
 
     def writer(self):
         return _SFTPWriterContextManager(self._connect(), self.path)
+
+    async def is_local_to(self, target_resource):
+        if not isinstance(target_resource, SFTPDescriptor):
+            return False
+        return target_resource.hostname == self.hostname and target_resource.port == self.port
+
+    async def _local_copy_async(self, target_resource, chunk_size=None, **kwargs):
+        conn = await self._connect()
+        async with conn.start_sftp_client() as sftp:
+            await sftp.copy(str(self.path), str(target_resource.path))
+
+    async def _local_move_file_async(self, target_resource, chunk_size=None, **kwargs):
+        conn = await self._connect()
+        async with conn.start_sftp_client() as sftp:
+            await sftp.rename(str(self.path), str(target_resource.path))
+
+    async def _do_rmdir_async(self):
+        conn = await self._connect()
+        async with conn.start_sftp_client() as sftp:
+            await sftp.rmdir(str(self.path))
+
+    async def _do_mkdir_async(self):
+        conn = await self._connect()
+        async with conn.start_sftp_client() as sftp:
+            await sftp.mkdir(str(self.path))
 
     @staticmethod
     def match_location(location):

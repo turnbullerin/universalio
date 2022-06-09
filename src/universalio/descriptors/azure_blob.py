@@ -177,6 +177,9 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
                     found.append(n)
                 yield self.child(n)
 
+    async def _do_rename_async(self, target):
+        pass
+
     async def exists_async(self):
         container = await self._get_container_client()
         async for item in container.list_blobs(name_starts_with=str(self.path)[1:]):
@@ -191,6 +194,17 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
 
     def writer(self):
         return _AzureBlobWriterContextManager(self._get_blob_client())
+
+    async def _do_rmdir_async(self):
+        pass
+
+    async def _do_mkdir_async(self):
+        pass
+
+    async def is_local_to(self, target_resource):
+        if not isinstance(target_resource, AzureBlobDescriptor):
+            return False
+
 
     @staticmethod
     def match_location(location):

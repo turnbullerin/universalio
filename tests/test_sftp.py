@@ -7,6 +7,7 @@ import time
 from universalio.descriptors import SFTPDescriptor, LocalDescriptor
 from universalio import GlobalLoopContext
 from autoinject import injector
+from .helpers import recursive_rmdir
 
 
 class TestSFTPDescriptor(unittest.TestCase):
@@ -61,19 +62,7 @@ class TestSFTPDescriptor(unittest.TestCase):
         r = cls.proc.communicate()
 
     def tearDown(self):
-        TestSFTPDescriptor.remove_dir(TestSFTPDescriptor.server_root, ["test_rsa.key"], True)
-
-    @staticmethod
-    def remove_dir(d, keep=[], clear=False):
-        for f in os.scandir(d):
-            if f.is_dir():
-                TestSFTPDescriptor.remove_dir(f.path)
-            elif f.name in keep:
-                continue
-            else:
-                os.remove(f.path)
-        if not clear:
-            os.rmdir(d)
+        recursive_rmdir(TestSFTPDescriptor.server_root, ["test_rsa.key"], True)
 
     def test_is_dir(self):
         self.assertTrue(SFTPDescriptor("sftp://localhost:3373/", "admin", "admin").is_dir())
@@ -200,6 +189,11 @@ class TestSFTPDescriptor(unittest.TestCase):
         self.assertIsInstance(child4, SFTPDescriptor)
         self.assertEqual(child4.path, pathlib.PurePosixPath("/foo/bar/fake.txt"))
         self.assertFalse(child4.exists())
+        # Test using trailing slashes
+        child5 = child1.child("bar/")
+        self.assertIsInstance(child2, SFTPDescriptor)
+        self.assertTrue(child2.is_dir())
+        self.assertEqual(child2.path, pathlib.PurePosixPath("/foo/bar"))
 
     def test_match_location(self):
         self.assertFalse(SFTPDescriptor.match_location(r"C:\test\file.txt"))
@@ -243,7 +237,7 @@ class TestSFTPDescriptor(unittest.TestCase):
         fd = SFTPDescriptor(r"sftp://localhost:3373/test2.txt", "admin", "admin")
         self.assertTrue(ld.exists())
         self.assertFalse(fd.exists())
-        ld.copy_to(fd)
+        ld.copy(fd)
         self.assertTrue(fd.exists())
         self.assertEqual(fd.text("utf-8"), pirate_king)
 
@@ -257,7 +251,7 @@ class TestSFTPDescriptor(unittest.TestCase):
         fd = SFTPDescriptor(r"sftp://localhost:3373/test.txt", "admin", "admin")
         self.assertTrue(fd.exists())
         self.assertFalse(ld.exists())
-        fd.copy_to(ld)
+        fd.copy(ld)
         self.assertTrue(ld.exists())
         self.assertEqual(ld.text("utf-8"), pirate_king)
 

@@ -1,15 +1,11 @@
 import unittest
 import pathlib
-import subprocess
-import shutil
 import os
-import time
 import toml
-from universalio.descriptors import AzureBlobDescriptor, LocalDescriptor
-from universalio import GlobalLoopContext
+from universalio.descriptors import AzureBlobDescriptor
 
 
-class TestSFTPDescriptor(unittest.TestCase):
+class TestAzureBlobDescriptor(unittest.TestCase):
 
     def setUp(self):
         self.credentials = {}
@@ -111,6 +107,10 @@ class TestSFTPDescriptor(unittest.TestCase):
         self.assertFalse(blob.is_file())
         self.assertTrue(blob.is_dir())
         child1 = blob.child("foo")
+        self.assertTrue(child1.exists())
+        self.assertFalse(child1.is_file())
+        self.assertTrue(child1.is_dir())
+        child5 = blob.child("foo/")
         self.assertTrue(child1.exists())
         self.assertFalse(child1.is_file())
         self.assertTrue(child1.is_dir())

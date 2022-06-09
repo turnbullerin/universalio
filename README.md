@@ -20,13 +20,18 @@ non-asynchronous methods are available as well.
 - parent()
 - child(child_name)
 - basename()
+- joinpath(*paths)
 - remove()
 - read(block_size)
 - write(bytes)
 - text(encoding)
-- copy_from()
-- copy_to()
-- copy_all_to()
+- copy()
+- move()
+- mkdir(recursive)
+- rmdir(recursive)
+- crawl()
+- detect_encoding()
+- is_local_to(resource)
 
 Asynchronous versions of most of the above exist with the suffix _async
 
@@ -36,6 +41,13 @@ Asynchronous versions of most of the above exist with the suffix _async
 - Local/network drives (via aiofiles)
 - SFTP (via asyncssh)
 - Azure Blob Storage (via azure.storage.blob.aio)
+- HTTP servers (via aiohttp)
+  - Requires GET support for read access
+  - Requires PUT support for write access
+  - Requires DELETE support for delete
+  - Supports MKCOL for basic directory/collection creation
+  - Supports COPY, falls back to a GET and a PUT, for file copying
+  - Supports MOVE, falls back to a COPY and a DELETE, for file moving
 
 
 ## Planned Enhancements
@@ -48,12 +60,10 @@ Asynchronous versions of most of the above exist with the suffix _async
 - Support for a batch file uploader/downloader
 - Support for / operator as a synonym for .child(), like pathlib does
 - Support for .joinpath() to skip creating descriptors when going two-levels deep
-- Support for glob() matching
+- Support for glob() matching and other searching options
 - Support for recursive listing
 - Support for pathlib-style with_name() to change the file name
 - Support for file metadata via stat
-- Support for mkdir() and rmdir() as well as recursive rmdir() and recursive mkdir()
-- Support for file renaming
 - Support for touch()
 - Support for writing text directly
 - More direct support for file copy/moving if the descriptor and connection is the same

@@ -4,7 +4,9 @@ import aiofiles.os
 import aiofiles.ospath
 from functools import lru_cache
 import os
+import shutil
 from .base import FileWriter, FileReader, PathResourceDescriptor, SynchronousDescriptor
+import sys
 
 
 class _LocalFileWriterContextManager:
@@ -41,11 +43,9 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
     def __init__(self, path):
         PathResourceDescriptor.__init__(self, pathlib.Path(path))
 
-    @lru_cache(maxsize=None)
     def is_dir(self):
         return self.path.is_dir()
 
-    @lru_cache(maxsize=None)
     def is_file(self):
         return self.path.is_file()
 
@@ -59,11 +59,41 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
         for f in os.scandir(self.path):
             yield LocalDescriptor(f.path)
 
+    def _do_rename(self, target):
+        self.path.rename(target.path)
+
     def reader(self, chunk_size=None):
         return _LocalFileReaderContextManager(self.path, chunk_size)
 
     def writer(self):
         return _LocalFileWriterContextManager(self.path)
+
+    async def is_local_to(self, target_resource):
+        return isinstance(target_resource, LocalDescriptor)
+
+    async def _do_rmdir_async(self):
+        await self.loop.execute(self.path.rmdir)
+
+    async def _do_mkdir_async(self):
+        await self.loop.execute(self.path.mkdir)
+
+    async def _local_move_file_async(self, target_resource, **kwargs):
+        await self.loop.execute(shutil.move, self.path, target_resource.path)
+
+    async def _local_move_dir_async(self, target_resource, **kwargs):
+        await self.loop.execute(shutil.move, self.path, target_resource.path)
+
+    async def _local_copy_async(self, target_resource, chunk_size=None, **kwargs):
+        await self.loop.execute(shutil.copy2, self.path, target_resource.path)
+
+    async def _local_copy_dir_async(self, target_resource, recursive=True, **kwargs):
+        v = sys.version_info
+        if recursive and v.major == 3 and v.minor >= 8:
+            await self.loop.execute(shutil.copytree, self.path, target_resource.path, dirs_exist_ok=True)
+        elif recursive and not await target_resource.exists_async():
+            await self.loop.execute(shutil.copytree, self.path, target_resource.path)
+        else:
+            await super()._local_copy_dir_async(target_resource, recursive, **kwargs)
 
     @staticmethod
     def match_location(location):
