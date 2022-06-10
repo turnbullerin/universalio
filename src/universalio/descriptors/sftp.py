@@ -145,17 +145,29 @@ class SFTPDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         async with conn.start_sftp_client() as sftp:
             await sftp.mkdir(str(self.path))
 
+    async def _stat(self):
+        conn = await self._connect()
+        async with conn.start_sftp_client() as sftp:
+            st = await sftp.stat(str(self.path))
+            return st, sftp.version()
+
     async def mtime_async(self):
-        return None
+        stat, ver = await self._cached_async("stat", self._stat)
+        return stat.mtime
 
     async def atime_async(self):
-        return None
+        stat, ver = await self._cached_async("stat", self._stat)
+        return stat.atime
 
-    async def ctime_async(self):
+    async def crtime_async(self):
+        stat, ver = await self._cached_async("stat", self._stat)
+        if ver >= 4:
+            return stat.crtime
         return None
 
     async def size_async(self):
-        return None
+        stat = await self._cached_async("stat", self._stat)
+        return stat.size
 
     @staticmethod
     def match_location(location):

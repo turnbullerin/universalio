@@ -2,6 +2,7 @@ import aiohttp
 import atexit
 from autoinject import injector
 import json
+import datetime
 from universalio import GlobalLoopContext
 from .base import FileWriter, FileReader, UriResourceDescriptor, AsynchronousDescriptor, UNIOError
 
@@ -243,17 +244,27 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         async with self.session.delete(self.uri) as response:
             response.raise_for_status()
 
+    def _parse_http_datetime(self, s):
+        if s is None or s == "":
+            return None
+        return datetime.datetime.strptime(str(s), "%a, %d %b %Y %H:%M:%S GMT") \
+            .replace(tzinfo=datetime.timezone.utc)
+
     async def mtime_async(self):
-        return None
+        head, stat = await self._head()
+        return self._parse_http_datetime(head.get("Last-Modified", None))
 
     async def atime_async(self):
-        return None
+        head, stat = await self._head()
+        return self._parse_http_datetime(head.get("Last-Accessed", None))
 
-    async def ctime_async(self):
-        return None
+    async def crtime_async(self):
+        head, stat = await self._head()
+        return self._parse_http_datetime(head.get("Content-Created", None))
 
     async def size_async(self):
-        return None
+        head, stat = await self._head()
+        return self._parse_http_datetime(head.get("Content-Length", None))
 
     def reader(self):
         return HttpReaderContextManager(self.uri, self.session)

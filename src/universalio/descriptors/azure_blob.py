@@ -205,17 +205,38 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         if not isinstance(target_resource, AzureBlobDescriptor):
             return False
 
+    async def _properties(self):
+        return await self._cached_async("properties", self._get_properties)
+
+    async def _get_properties(self):
+        blob = await self._get_blob_client()
+        if blob is None:
+            return None
+        return await blob.get_blob_properties()
+
     async def mtime_async(self):
-        return None
+        props = await self._properties()
+        if props is None:
+            return None
+        return props.last_modified
 
     async def atime_async(self):
-        return None
+        props = await self._properties()
+        if props is None:
+            return None
+        return props.last_accessed_on
 
-    async def ctime_async(self):
-        return None
+    async def crtime_async(self):
+        props = await self._properties()
+        if props is None:
+            return None
+        return props.creation_time
 
     async def size_async(self):
-        return None
+        props = await self._properties()
+        if props is None:
+            return None
+        return props.size
 
     @staticmethod
     def match_location(location):

@@ -153,7 +153,7 @@ class ResourceDescriptor(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def ctime(self):
+    def crtime(self):
         pass
 
     @abc.abstractmethod
@@ -169,7 +169,7 @@ class ResourceDescriptor(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def ctime_async(self):
+    async def crtime_async(self):
         pass
 
     @abc.abstractmethod
@@ -441,8 +441,8 @@ class AsynchronousDescriptor(ResourceDescriptor, abc.ABC):
     def atime(self):
         return self.loop.run(self.atime_async())
 
-    def ctime(self):
-        return self.loop.run(self.ctime_async())
+    def crtime(self):
+        return self.loop.run(self.crtime_async())
 
     def size(self):
         return self.loop.run(self.size_async())
@@ -472,8 +472,8 @@ class SynchronousDescriptor(ResourceDescriptor, abc.ABC):
     async def atime_async(self):
         return await self.loop.execute(self.atime)
 
-    async def ctime_async(self):
-        return await self.loop.execute(self.ctime)
+    async def crtime_async(self):
+        return await self.loop.execute(self.crtime)
 
     async def size_async(self):
         return await self.loop.execute(self.size)

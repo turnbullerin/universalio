@@ -62,7 +62,7 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
     def atime(self):
         return self._cached("stat", self.path.stat).st_atime
 
-    def ctime(self):
+    def crtime(self):
         return self._cached("stat", self.path.stat).st_ctime
 
     def size(self):
