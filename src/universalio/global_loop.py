@@ -14,6 +14,12 @@ class GlobalLoopContext:
         asyncio.set_event_loop(self.loop)
         atexit.register(GlobalLoopContext.exit, self)
 
+    def recreate_loop(self):
+        if self.loop.is_running():
+            raise OSError("Loop is still running, cannot recreate")
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+
     def run(self, coro):
         if isinstance(coro, AsyncGeneratorType):
             return self.loop.run_until_complete(self.generate(coro))
