@@ -6,6 +6,8 @@ from autoinject import injector
 import azure.storage.blob.aio as asb
 from urllib.parse import urlparse
 import asyncio
+from zirconium import ApplicationConfig
+
 
 AZURE_BLOB_UPLOAD_BUFFER = 5 * 1024 * 1024
 
@@ -246,5 +248,8 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         return str(p.path) != "/" and str(p.hostname).endswith(".blob.core.windows.net")
 
     @staticmethod
-    def create_from_location(location: str):
-        return AzureBlobDescriptor(location)
+    @injector.inject
+    def create_from_location(location: str, config: ApplicationConfig):
+        pieces = urlparse(location)
+        connect_str = config.get(("universalio", "azure", pieces.hostname, "connect_str"), default=None)
+        return AzureBlobDescriptor(location, connect_str)

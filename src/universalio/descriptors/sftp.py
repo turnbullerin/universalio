@@ -1,9 +1,10 @@
 import asyncssh
 import hashlib
-from functools import lru_cache
 from .base import FileWriter, FileReader, UriResourceDescriptor, AsynchronousDescriptor, ConnectionRegistry
 from universalio import GlobalLoopContext
 from autoinject import injector
+import zirconium as zr
+from urllib.parse import urlparse
 
 
 class _SFTPWriterContextManager:
@@ -174,5 +175,9 @@ class SFTPDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         return location.lower().startswith("sftp://")
 
     @staticmethod
-    def create_from_location(location: str):
-        return SFTPDescriptor(location)
+    @injector.inject
+    def create_from_location(location: str, config: zr.ApplicationConfig):
+        p = urlparse(location)
+        un = config.get(("universalio", "sftp", p.hostname, "username"), None)
+        pw = config.get(("universalio", "sftp", p.hostname, "password"), None)
+        return SFTPDescriptor(location, un, pw)

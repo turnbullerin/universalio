@@ -59,9 +59,7 @@ Asynchronous versions of most of the above exist with the suffix _async
 - Support for direct HTTP access and HTML scraping
 - Support for a batch file uploader/downloader
 - Support for glob() matching and other searching options
-- Support for recursive listing
 - Support for pathlib-style with_name() to change the file name
-- Support for file metadata via stat
 - Support for touch()
 - Support for writing text directly
 - Support for HTTP authentication methods, including a custom method to support custom API calls
