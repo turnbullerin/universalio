@@ -5,9 +5,8 @@ import asyncio
 from autoinject import injector
 import atexit
 from universalio import GlobalLoopContext
-import functools
 import hashlib
-import pickle
+import datetime
 
 DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024
 
@@ -161,7 +160,7 @@ class ResourceDescriptor(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def mtime_async(self):
+    async def mtime_async(self) -> datetime.datetime:
         pass
 
     @abc.abstractmethod
@@ -218,6 +217,29 @@ class ResourceDescriptor(abc.ABC):
         async for x in self.list_async():
             return False
         return True
+
+    def fingerprint(self):
+        return self.loop.run(self.fingerprint_async())
+
+    async def fingerprint_async(self):
+        mt = await self.mtime_async()
+        size = await self.size_async()
+        if mt and size:
+            return "{}_{}".format(mt.strftime("%Y%m%d%H%M%S"), size)
+        return await self.file_hash_async()
+
+    def file_hash(self):
+        return self.loop.run(self.file_hash_async())
+
+    async def file_hash_async(self):
+        return self._cached_async("file_hash", self._calculate_file_hash_async)
+
+    async def _calculate_file_hash_async(self):
+        h = hashlib.sha256()
+        async with self.reader() as reader:
+            for chunk in reader.read():
+                h.update(chunk)
+        return h.hexdigest()
 
     def rmdir(self, recursive=False):
         return self.loop.run(self.rmdir_async(recursive))

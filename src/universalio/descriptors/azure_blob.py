@@ -1,5 +1,4 @@
 import hashlib
-from functools import lru_cache
 from .base import FileWriter, FileReader, UriResourceDescriptor, AsynchronousDescriptor, ConnectionRegistry
 from universalio import GlobalLoopContext
 from autoinject import injector
@@ -195,6 +194,7 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         return _AzureBlobReaderContextManager(self._get_blob_client(), chunk_size)
 
     def writer(self):
+        self.clear_cache()
         return _AzureBlobWriterContextManager(self._get_blob_client())
 
     async def _do_rmdir_async(self):
@@ -233,6 +233,12 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         if props is None:
             return None
         return props.creation_time
+
+    async def fingerprint_async(self):
+        props = await self._properties()
+        if props is None:
+            return None
+        return props.etag
 
     async def size_async(self):
         props = await self._properties()

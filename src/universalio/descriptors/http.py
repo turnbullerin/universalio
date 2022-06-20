@@ -4,7 +4,7 @@ from autoinject import injector
 import json
 import datetime
 from universalio import GlobalLoopContext
-from .base import FileWriter, FileReader, UriResourceDescriptor, AsynchronousDescriptor, UNIOError
+from .base import FileWriter, FileReader, UriResourceDescriptor, AsynchronousDescriptor, UNIOError, ConnectionRegistry
 
 
 class HttpWriterContextManager:
@@ -29,11 +29,11 @@ class HttpWriterContextManager:
 
     def __init__(self, uri, session):
         self.uri = uri
-        self.session = session
+        self._session = session
         self._writer = None
 
     async def __aenter__(self):
-        self._writer = HttpWriterContextManager.Writer(self.session, self.uri)
+        self._writer = HttpWriterContextManager.Writer(await self._session, self.uri)
         return self._writer
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -52,12 +52,14 @@ class HttpReaderContextManager:
 
     def __init__(self, uri, session):
         self.uri = uri
-        self.session = session
+        self._session_coro = session
+        self._session = None
         self._handle = None
         self._get = None
 
     async def __aenter__(self):
-        self._get = await self.session.get(self.uri)
+        self._session = await self._session_coro
+        self._get = await self._session.get(self.uri)
         self._handle = await self._get.__aenter__()
         return HttpReaderContextManager.Reader(self._handle)
 
@@ -66,26 +68,16 @@ class HttpReaderContextManager:
 
 
 @injector.injectable
-class HttpSessionRegistry:
+class HttpSessionRegistry(ConnectionRegistry):
 
-    loop: GlobalLoopContext = None
+    def _construct_key(self, *args, **kwargs):
+        return "1"
 
-    @injector.construct
-    def __init__(self):
-        self.session = self.loop.run(self.get_session())
-        atexit.register(HttpSessionRegistry.exit, self)
-
-    def exit(self):
-        return self.loop.run(self.exit_async())
-
-    async def get_session(self):
+    async def _create_connection(self, *args, **kwargs):
         return aiohttp.ClientSession()
 
-    async def exit_async(self):
-        await self.session.close()
-
-    def __getattr__(self, item):
-        return getattr(self.session, item)
+    async def _close_connection(self, conn):
+        await conn.close()
 
 
 class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
@@ -98,6 +90,14 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         super().__init__(uri, trailing_slashes_matter=True)
         self._is_canonical = None
 
+    def _send_headers(self):
+        return {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36",
+        }
+
+    async def _client(self):
+        return await self.session.connect()
+
     async def _head(self):
         await self.canonicalize()
         return await self._cached_async("head", self._head_call)
@@ -108,14 +108,16 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
 
     async def _options_call(self):
         headers = {}
-        async with self.session.head(self.uri) as response:
+        client = await self._client()
+        async with client.head(self.uri, headers=self._send_headers()) as response:
             if response.status == 200:
                 headers = response.headers
         return headers
 
     async def _head_call(self):
         headers, status = {}, None
-        async with self.session.head(self.uri) as response:
+        client = await self._client()
+        async with client.head(self.uri, headers=self._send_headers()) as response:
             status = response.status
             if response.status == 200:
                 headers = response.headers
@@ -165,6 +167,14 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         # By convention
         return not self.uri.endswith("/")
 
+    async def fingerprint_async(self):
+        headers, status = await self._head()
+        if status >= 300:
+            return None
+        if "ETag" in headers:
+            return headers.get("ETag")
+        return await super().fingerprint_async()
+
     async def exists_async(self):
         headers, status = await self._head()
         return status == 200
@@ -202,7 +212,8 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
 
     async def _do_mkdir_async(self):
         if self._supports_http_method("MKCOL"):
-            async with self.session.request("MKCOL", self.uri) as resp:
+            client = await self._client()
+            async with client.request("MKCOL", self.uri) as resp:
                 resp.raise_for_status()
 
     async def _local_move_file_async(self, target, **kwargs):
@@ -213,7 +224,8 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
             headers = {
                 "Destination": target.uri
             }
-            async with self.session.request("MOVE", self.uri, headers=headers) as resp:
+            client = await self._client()
+            async with client.request("MOVE", self.uri, headers=headers) as resp:
                 resp.raise_for_status()
 
         # Slightly less efficient, but still fast if it supports COPY and DELETE
@@ -221,7 +233,8 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
             headers = {
                 "Destination": target.uri
             }
-            async with self.session.request("COPY", self.uri, headers=headers) as resp:
+            client = await self._client()
+            async with client.request("COPY", self.uri, headers=headers) as resp:
                 resp.raise_for_status()
             await self.remove_async()
 
@@ -233,7 +246,8 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
             headers = {
                 "Destination": target.uri
             }
-            async with self.session.request("COPY", self.uri, headers=headers) as resp:
+            client = await self._client()
+            async with client.request("COPY", self.uri, headers=headers) as resp:
                 resp.raise_for_status()
         else:
             await super()._do_copy_async(target, chunk_size, **kwargs)
@@ -241,7 +255,8 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
     async def remove_async(self):
         if not await self._supports_http_method("DELETE"):
             raise UNIOError("Delete not supported on this uri: {}".format(self.uri))
-        async with self.session.delete(self.uri) as response:
+        client = await self._client()
+        async with client.delete(self.uri) as response:
             response.raise_for_status()
 
     def _parse_http_datetime(self, s):
@@ -267,13 +282,21 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         return self._parse_http_datetime(head.get("Content-Length", None))
 
     def reader(self):
-        return HttpReaderContextManager(self.uri, self.session)
+        return HttpReaderContextManager(self.uri, self._client())
 
     def writer(self):
-        self.clear_cache("head")
-        return HttpWriterContextManager(self.uri, self.session)
+        self.clear_cache()
+        return HttpWriterContextManager(self.uri, self._client())
 
     def is_local_to(self, resource):
         if not isinstance(resource, HttpDescriptor):
             return False
         return self.hostname == resource.hostname
+
+    @staticmethod
+    def match_location(location):
+        return location.lower().startswith("http://") or location.lower().startswith("https://")
+
+    @staticmethod
+    def create_from_location(location: str):
+        return HttpDescriptor(location)

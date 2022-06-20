@@ -119,6 +119,7 @@ class SFTPDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         return _SFTPReaderContextManager(self._connect(), self.path, chunk_size)
 
     def writer(self):
+        self.clear_cache()
         return _SFTPWriterContextManager(self._connect(), self.path)
 
     async def is_local_to(self, target_resource):
