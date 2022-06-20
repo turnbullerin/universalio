@@ -1,6 +1,7 @@
 from .global_loop import GlobalLoopContext
 from .fileman import FileManager
 from .fileman import _FileWrapper
+from universalio.batch.batch import BatchFileCopy
 import zirconium
 
 

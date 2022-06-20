@@ -1,7 +1,7 @@
 from threading import Thread
 import queue
-from .global_loop import GlobalLoopContext
-from .fileman import FileManager
+from universalio.global_loop import GlobalLoopContext
+from universalio.fileman import FileManager
 from autoinject import injector
 import asyncio
 import time
@@ -14,10 +14,11 @@ class AsynchronousThread(Thread):
     @injector.construct
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._q = queue.PriorityQueue()
+        self._q = queue.Queue()
         self._tasks = set()
         self._completed = {}
         self._exit_set = False
+        self.daemon = True
 
     def run_coro(self, job_name, coro_func, *args, **kwargs):
         self._q.put((coro_func, args, kwargs, job_name))
@@ -42,16 +43,24 @@ class AsynchronousThread(Thread):
     async def process_queue(self):
         while True:
             if self._q.empty():
-                done, pending = await asyncio.wait(self._tasks, timeout=0.1, return_when=asyncio.FIRST_COMPLETED)
-                for task in done:
-                    self._completed[str(task.get_name())] = task
-                self._tasks = pending
+                if self._tasks:
+                    done, pending = await asyncio.wait(self._tasks, timeout=0.1, return_when=asyncio.FIRST_COMPLETED)
+                    print(done)
+                    for task in done:
+                        self._completed[str(task.name)] = task
+                    self._tasks = pending
+                else:
+                    print("sleep")
+                    await asyncio.sleep(1)
             else:
                 item = self._q.get()
+                print("queuing task")
                 if isinstance(item, str) and item == "halt":
                     break
                 else:
-                    self._tasks.add(asyncio.create_task(item[0](*item[1], **item[2]), name=item[3]))
+                    tsk = asyncio.create_task(item[0](*item[1], **item[2]))
+                    tsk.name = item[3]
+                    self._tasks.add(tsk)
         await asyncio.gather(*self._tasks)
 
 
@@ -62,7 +71,8 @@ class BatchFileCopy:
     @injector.construct
     def __init__(self):
         self.t = AsynchronousThread()
-        self.t.run()
+        self.t.start()
+        self.sem = asyncio.Semaphore(5)
 
     def queue_copy(self, src, dst, name=None, **kwargs):
         if name is None:
@@ -85,6 +95,7 @@ class BatchFileCopy:
     async def _do_copy(self, src, dst, **kwargs):
         src = self.files.get_descriptor(src)
         dst = self.files.get_descriptor(dst)
-        await src.copy_async(dst, **kwargs)
+        async with self.sem:
+            await src.copy_async(dst, **kwargs)
 
 

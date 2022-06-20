@@ -47,8 +47,8 @@ class FileManager:
             sort_me.sort(key=lambda x: x[1])
             self.registry_order = [x[0] for x in sort_me]
         for key in self.registry_order:
-            if self.registry[key].match_location(location):
-                return self.registry[key].create_from_location(location)
+            if self.registry[key][0].match_location(location):
+                return self.registry[key][0].create_from_location(location)
         raise ValueError("No descriptor class found for location {}".format(location))
 
 
