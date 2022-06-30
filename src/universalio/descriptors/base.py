@@ -331,9 +331,12 @@ class ResourceDescriptor(abc.ABC):
 
     async def _move_dir_async(self, target_resource, **kwargs):
         if self.is_local_to(target_resource):
-            return await self._local_move_dir_async(target_resource, **kwargs)
+            x = await self._local_move_dir_async(target_resource, **kwargs)
         else:
-            return await self._do_move_dir_async(target_resource, **kwargs)
+            x = await self._do_move_dir_async(target_resource, **kwargs)
+        target_resource.clear_cache()
+        self.clear_cache()
+        return x
 
     async def _do_move_dir_async(self, target_resource, **kwargs):
         await self._copy_dir_async(target_resource, recursive=True, **kwargs)
@@ -346,9 +349,12 @@ class ResourceDescriptor(abc.ABC):
         if (not kwargs.get("allow_overwrite", False)) and await target_resource.exists_async():
             raise UNIOError("File {} already exists".format(target_resource))
         if self.is_local_to(target_resource):
-            return await self._local_move_file_async(target_resource, **kwargs)
+            x = await self._local_move_file_async(target_resource, **kwargs)
         else:
-            return await self._do_move_file_async(target_resource, **kwargs)
+            x = await self._do_move_file_async(target_resource, **kwargs)
+        target_resource.clear_cache()
+        self.clear_cache()
+        return x
 
     async def _do_move_file_async(self, target_resource, **kwargs):
         await self._copy_file_async(target_resource, as_subfolder=False, **kwargs)
@@ -396,6 +402,7 @@ class ResourceDescriptor(abc.ABC):
                     await partial_file.remove_async()
         else:
             await self._do_copy_file(target_resource, **kwargs)
+        target_resource.clear_cache()
 
     async def _do_copy_file(self, target_resource, **kwargs):
         # Delegate copy to another method so we can override it as needed
@@ -426,6 +433,7 @@ class ResourceDescriptor(abc.ABC):
             await self._local_copy_dir_async(target_resource, **kwargs)
         else:
             await self._do_copy_dir_async(target_resource, **kwargs)
+        target_resource.clear_cache()
 
     async def _do_copy_dir_async(self, target_dir, recursive=True, preliminary_check=False, make_stub_dirs=False, **kwargs):
         if preliminary_check and not kwargs.get("allow_overwrite", False):
@@ -453,8 +461,8 @@ class ResourceDescriptor(abc.ABC):
             src, trg = work.pop()
             async for file in src.list_async():
                 mirror_file = None if trg is None else trg.child(file.basename())
-                check_dir = await file.is_dir()
-                if check_dir or include_directories:
+                check_dir = await file.is_dir_async()
+                if (not check_dir) or include_directories:
                     yield file if mirror_file is None else (file, mirror_file)
                     if check_dir:
                         work.append((file, mirror_file))

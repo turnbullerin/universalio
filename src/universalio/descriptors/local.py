@@ -2,7 +2,7 @@ import pathlib
 import aiofiles
 import aiofiles.os
 import aiofiles.ospath
-from functools import lru_cache
+import datetime
 import os
 import shutil
 from .base import FileWriter, FileReader, PathResourceDescriptor, SynchronousDescriptor
@@ -57,13 +57,13 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
         return self.path.unlink()
 
     def mtime(self):
-        return self._cached("stat", self.path.stat).st_mtime
+        return datetime.datetime.fromtimestamp(self._cached("stat", self.path.stat).st_mtime)
 
     def atime(self):
-        return self._cached("stat", self.path.stat).st_atime
+        return datetime.datetime.fromtimestamp(self._cached("stat", self.path.stat).st_atime)
 
     def crtime(self):
-        return self._cached("stat", self.path.stat).st_ctime
+        return datetime.datetime.fromtimestamp(self._cached("stat", self.path.stat).st_ctime)
 
     def size(self):
         return self._cached("stat", self.path.stat).st_size

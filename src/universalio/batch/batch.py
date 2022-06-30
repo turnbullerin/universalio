@@ -12,8 +12,9 @@ class AsynchronousThread(Thread):
     loop: GlobalLoopContext = None
 
     @injector.construct
-    def __init__(self, *args, **kwargs):
+    def __init__(self, on_complete=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._on_complete = on_complete
         self._q = queue.Queue()
         self._tasks = set()
         self._completed = {}
@@ -28,7 +29,6 @@ class AsynchronousThread(Thread):
         super().join(timeout)
 
     def run(self):
-        self.loop.recreate_loop()
         self._exit_set = False
         self.loop.run(self.process_queue())
 
@@ -45,16 +45,13 @@ class AsynchronousThread(Thread):
             if self._q.empty():
                 if self._tasks:
                     done, pending = await asyncio.wait(self._tasks, timeout=0.1, return_when=asyncio.FIRST_COMPLETED)
-                    print(done)
                     for task in done:
                         self._completed[str(task.name)] = task
                     self._tasks = pending
                 else:
-                    print("sleep")
                     await asyncio.sleep(1)
             else:
                 item = self._q.get()
-                print("queuing task")
                 if isinstance(item, str) and item == "halt":
                     break
                 else:
@@ -62,6 +59,8 @@ class AsynchronousThread(Thread):
                     tsk.name = item[3]
                     self._tasks.add(tsk)
         await asyncio.gather(*self._tasks)
+        if self._on_complete:
+            self._on_complete()
 
 
 class BatchFileCopy:

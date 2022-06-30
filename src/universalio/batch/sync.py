@@ -4,7 +4,7 @@ import asyncio
 import time
 import zirconium as zr
 import sqlite3
-from batch import AsynchronousThread
+from .batch import AsynchronousThread
 from universalio import GlobalLoopContext
 import os
 
@@ -16,10 +16,16 @@ class DirectorySync:
 
     @injector.construct
     def __init__(self, in_memory_checker=False):
-        self.t = AsynchronousThread()
+        self.t = AsynchronousThread(self._complete)
         self.t.start()
-        self.sem = asyncio.Semaphore(5)
+        self.sem = None
         self.in_memory_checker = in_memory_checker
+        self.checker = None
+
+    def _complete(self):
+        if self.checker:
+            self.checker.close()
+            self.checker = None
 
     def sync_dir(self, src, dst, name=None):
         if name is None:
@@ -40,13 +46,15 @@ class DirectorySync:
         self.t.join()
 
     async def _do_sync(self, src, dst):
-        checker = None
-        if self.in_memory_checker:
-            checker = InMemoryChecker()
-        else:
-            db = self.config.as_path(("universalio", "sync_db"), default=r".\.sync.db")
-            checker = SqliteSyncManager(db)
-        synchronizer = DirectorySynchronizer(src, dst, checker, self.sem)
+        if self.sem is None:
+            self.sem = asyncio.Semaphore(5)
+        if self.checker is None:
+            if self.in_memory_checker:
+                self.checker = InMemoryChecker()
+            else:
+                db = self.config.as_path(("universalio", "sync_db"), default=r".\.sync.db")
+                self.checker = SqliteSyncManager(db)
+        synchronizer = DirectorySynchronizer(src, dst, self.checker, self.sem)
         await synchronizer.sync_all()
 
 
@@ -69,10 +77,11 @@ class DirectorySynchronizer:
             if await self._check_sync(src_file, dst_file, src_print):
                 tsk = self.loop.create_task(self._do_file_copy(src_file, dst_file, src_print))
                 work.append(tsk)
+        await asyncio.gather(*work)
 
     async def _do_file_copy(self, src_file, dst_file, src_print):
         async with self.sem:
-            await src_file.copy(dst_file, _skip_dir_check=True, allow_overwrite=True, use_partial_file=True)
+            await src_file.copy_async(dst_file, _skip_dir_check=True, allow_overwrite=True, use_partial_file=True)
             await self.checker.save_fingerprint(str(src_file), src_print)
 
     async def _check_sync(self, src_file, dst_file, src_print):
@@ -92,17 +101,33 @@ class SqliteSyncManager:
     def __init__(self, db):
         self.db = db
         self.db_lock = asyncio.Lock()
+        self.conn = sqlite3.connect(self.db)
+        ddl = "CREATE TABLE IF NOT EXISTS fingerprint_records (filepath text UNIQUE, fingerprint text)"
+        cursor = self.conn.cursor()
+        cursor.execute(ddl)
+        self.conn.commit()
+        cursor.close()
 
-    def get_last_fingerprint(self, file):
-        pass
+    def close(self):
+        self.conn.close()
 
-    def save_fingerprint(self, file, fingerprint):
-        pass
+    async def get_last_fingerprint(self, file):
+        q = "SELECT fingerprint FROM fingerprint_records WHERE filepath = ?"
+        cursor = self.conn.cursor()
+        fp = cursor.execute(q, [file]).fetchone()
+        return fp[0] if fp else None
+
+    async def save_fingerprint(self, file, fingerprint):
+        async with self.db_lock:
+            q = "REPLACE INTO fingerprint_records (filepath, fingerprint) VALUES (?, ?)"
+            cursor = self.conn.cursor()
+            cursor.execute(q, [file, fingerprint])
+            self.conn.commit()
 
 
 class InMemoryChecker:
 
-    def __init__(self, db):
+    def __init__(self):
         self._lock = asyncio.Lock()
         self._mem = {}
 

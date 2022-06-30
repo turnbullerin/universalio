@@ -1,11 +1,28 @@
 from autoinject import injector
 from universalio.descriptors.base import ResourceDescriptor
 import universalio.descriptors as desc
+import sys
 
-# Backwards support for Python 3.7
+# Metadata entrypoint support depends on Python version
 import importlib.util
 if importlib.util.find_spec("importlib.metadata"):
-    from importlib.metadata import entry_points
+    # Python 3.10 supports entry_points(group=?)
+    if sys.version_info.minor >= 10:
+        from importlib.metadata import entry_points
+    # Python 3.8 and 3.9 have metadata, but don't support the keyword argument
+    else:
+        from importlib.metadata import entry_points as _entry_points
+
+        def entry_points(group=None):
+            eps = _entry_points()
+            if group is None:
+                return eps
+            elif group in eps:
+                return eps[group]
+            else:
+                return []
+
+# Backwards support for Python 3.7
 else:
     from importlib_metadata import entry_points
 
@@ -42,6 +59,7 @@ class FileManager:
     def get_descriptor(self, location) -> ResourceDescriptor:
         if isinstance(location, ResourceDescriptor):
             return location
+        location = str(location)
         if self.registry_order is None:
             sort_me = [(key, self.registry[key][1]) for key in self.registry]
             sort_me.sort(key=lambda x: x[1])

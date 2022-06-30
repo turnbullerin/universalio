@@ -10,8 +10,7 @@ import atexit
 class GlobalLoopContext:
 
     def __init__(self):
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
+        self.loop = asyncio.get_event_loop()
         atexit.register(GlobalLoopContext.exit, self)
 
     def recreate_loop(self):
