@@ -25,6 +25,9 @@ class GlobalLoopContext:
             return self.loop.run_until_complete(self.generate(coro))
         return self.loop.run_until_complete(coro)
 
+    def create_task(self, coro):
+        return self.loop.create_task(coro)
+
     async def execute(self, cb, *args, **kwargs):
         return await self.loop.run_in_executor(None, functools.partial(cb, *args, **kwargs))
 

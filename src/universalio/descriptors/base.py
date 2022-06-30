@@ -103,6 +103,9 @@ class ResourceDescriptor(abc.ABC):
             self._cache[cache_key] = await coro_func(*args, **kwargs)
         return self._cache[cache_key]
 
+    async def _supports_fast_rename_async(self):
+        return False
+
     @abc.abstractmethod
     def is_dir(self):
         pass
@@ -125,6 +128,10 @@ class ResourceDescriptor(abc.ABC):
 
     @abc.abstractmethod
     def child(self, child):
+        pass
+
+    @abc.abstractmethod
+    def with_name(self, name):
         pass
 
     @abc.abstractmethod
@@ -365,7 +372,7 @@ class ResourceDescriptor(abc.ABC):
             await self._copy_file_async(target_resource, **kwargs)
         return target_resource
 
-    async def _copy_file_async(self, target_resource, allow_overwrite=False, _skip_dir_check=False, **kwargs):
+    async def _copy_file_async(self, target_resource, allow_overwrite=False, _skip_dir_check=False, use_partial_file=False, **kwargs):
         # Check if we are copying a file to a directory and, if so, use the basename
         if (not _skip_dir_check) and await target_resource.is_dir_async():
             target_resource = target_resource.child(self.basename())
@@ -374,6 +381,23 @@ class ResourceDescriptor(abc.ABC):
         if (not allow_overwrite) and await target_resource.exists_async():
             raise UNIOError("Resource {} already exists".format(target_resource))
 
+        if use_partial_file and await self._supports_fast_rename_async():
+            ext_no = 1
+            bn = target_resource.basename()
+            partial_file = target_resource.with_name("{}.partial{}".format(bn, ext_no))
+            while await partial_file.exists_async():
+                ext_no += 1
+                partial_file = target_resource.with_name("{}.partial{}".format(bn, ext_no))
+            try:
+                await self._do_copy_file(partial_file, **kwargs)
+                await partial_file.move_async(target_resource, allow_overwrite=allow_overwrite)
+            finally:
+                if await partial_file.exists_async():
+                    await partial_file.remove_async()
+        else:
+            await self._do_copy_file(target_resource, **kwargs)
+
+    async def _do_copy_file(self, target_resource, **kwargs):
         # Delegate copy to another method so we can override it as needed
         if await self.is_local_to(target_resource):
             await self._local_copy_async(target_resource, **kwargs)
@@ -519,6 +543,9 @@ class PathResourceDescriptor(ResourceDescriptor, abc.ABC):
     def child(self, child):
         return self.joinpath(child)
 
+    def with_name(self, name):
+        return self._create_descriptor(self.path.with_name(name))
+
     def basename(self):
         return self.path.name
 
@@ -582,6 +609,12 @@ class UriResourceDescriptor(PathResourceDescriptor, abc.ABC):
     def parent(self):
         new_path = self.path.parent
         if self.trailing_slashes_matter:
+            new_path = str(new_path) + "/"
+        return self._create_descriptor(self._path_to_uri(new_path))
+
+    def with_name(self, name):
+        new_path = self.path.with_name(name)
+        if self.trailing_slashes_matter and name.endswith("/"):
             new_path = str(new_path) + "/"
         return self._create_descriptor(self._path_to_uri(new_path))
 

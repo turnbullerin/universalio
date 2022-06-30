@@ -171,6 +171,9 @@ class SFTPDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         stat = await self._cached_async("stat", self._stat)
         return stat.size
 
+    async def _supports_fast_rename_async(self):
+        return True
+
     @staticmethod
     def match_location(location):
         return location.lower().startswith("sftp://")

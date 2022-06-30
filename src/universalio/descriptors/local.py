@@ -72,8 +72,8 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
         for f in os.scandir(self.path):
             yield LocalDescriptor(f.path)
 
-    def _do_rename(self, target):
-        self.path.rename(target.path)
+    async def _supports_fast_rename_async(self):
+        return True
 
     def reader(self, chunk_size=None):
         return _LocalFileReaderContextManager(self.path, chunk_size)

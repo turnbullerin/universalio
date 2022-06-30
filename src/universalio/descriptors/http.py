@@ -216,6 +216,11 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
             async with client.request("MKCOL", self.uri) as resp:
                 resp.raise_for_status()
 
+    async def _supports_fast_rename_async(self):
+        opts = await self._options()
+        methods = [x.strip().upper() for x in opts.get("Accept", "")]
+        return "MOVE" in methods
+
     async def _local_move_file_async(self, target, **kwargs):
         opts = await self._options()
         methods = [x.strip().upper() for x in opts.get("Accept", "")]
