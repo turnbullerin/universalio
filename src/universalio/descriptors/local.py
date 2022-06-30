@@ -7,6 +7,8 @@ import os
 import shutil
 from .base import FileWriter, FileReader, PathResourceDescriptor, SynchronousDescriptor
 import sys
+from universalio import GlobalLoopContext
+from autoinject import injector
 
 
 class _LocalFileWriterContextManager:
@@ -40,6 +42,9 @@ class _LocalFileReaderContextManager:
 
 class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
 
+    loop: GlobalLoopContext = None
+
+    @injector.construct
     def __init__(self, path):
         PathResourceDescriptor.__init__(self, pathlib.Path(path))
 

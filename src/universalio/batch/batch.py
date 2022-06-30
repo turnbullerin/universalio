@@ -5,6 +5,7 @@ from universalio.fileman import FileManager
 from autoinject import injector
 import asyncio
 import time
+import logging
 
 
 class AsynchronousThread(Thread):
@@ -45,20 +46,33 @@ class AsynchronousThread(Thread):
             if self._q.empty():
                 if self._tasks:
                     done, pending = await asyncio.wait(self._tasks, timeout=0.1, return_when=asyncio.FIRST_COMPLETED)
+                    if done:
+                        logging.getLogger(__name__).debug("{} tasks completed".format(done))
                     for task in done:
-                        self._completed[str(task.name)] = task
+                        try:
+                            self._completed[str(task.name)] = task.result()
+                        except SystemExit as ex:
+                            raise ex
+                        except KeyboardInterrupt as ex:
+                            raise ex
+                        except Exception as ex:
+                            logging.getLogger(__name__).exception(ex)
+                            self._completed[str(task.name)] = False
                     self._tasks = pending
                 else:
                     await asyncio.sleep(1)
             else:
                 item = self._q.get()
                 if isinstance(item, str) and item == "halt":
+                    logging.getLogger(__name__).debug("Halt requested, no more queue items will be processed")
                     break
                 else:
+                    logging.getLogger(__name__).debug("Queuing new task")
                     tsk = asyncio.create_task(item[0](*item[1], **item[2]))
                     tsk.name = item[3]
                     self._tasks.add(tsk)
         await asyncio.gather(*self._tasks)
+        logging.getLogger(__name__).debug("All tasks completed")
         if self._on_complete:
             self._on_complete()
 
