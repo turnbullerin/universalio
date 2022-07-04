@@ -464,8 +464,8 @@ class ResourceDescriptor(abc.ABC):
                 check_dir = await file.is_dir_async()
                 if (not check_dir) or include_directories:
                     yield file if mirror_file is None else (file, mirror_file)
-                    if check_dir:
-                        work.append((file, mirror_file))
+                if check_dir:
+                    work.append((file, mirror_file))
 
     async def is_local_to(self, target_resource):
         return False
