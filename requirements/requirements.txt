@@ -3,3 +3,4 @@ aiofiles
 aiohttp
 toml
 zirconium>=0.2.0
+zrlog
