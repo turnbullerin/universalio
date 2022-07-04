@@ -4,6 +4,7 @@ from autoinject import injector
 import asyncio
 import functools
 import atexit
+import time
 
 
 @injector.injectable
@@ -20,9 +21,15 @@ class GlobalLoopContext:
         asyncio.set_event_loop(self.loop)
 
     def run(self, coro):
-        if isinstance(coro, AsyncGeneratorType):
-            return self.loop.run_until_complete(self.generate(coro))
-        return self.loop.run_until_complete(coro)
+        if self.loop.is_running():
+            t = self.loop.create_task(coro)
+            while not t.done():
+                time.sleep(0.1)
+            return t.result()
+        else:
+            if isinstance(coro, AsyncGeneratorType):
+                return self.loop.run_until_complete(self.generate(coro))
+            return self.loop.run_until_complete(coro)
 
     def create_task(self, coro):
         return self.loop.create_task(coro)
