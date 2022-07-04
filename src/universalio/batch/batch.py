@@ -25,9 +25,10 @@ class AsynchronousThread(Thread):
     def run_coro(self, job_name, coro_func, *args, **kwargs):
         self._q.put((coro_func, args, kwargs, job_name))
 
-    def join(self, timeout=None):
+    def wait_join(self):
         self._q.put("halt")
-        super().join(timeout)
+        while self.is_alive():
+            self.join(0.1)
 
     def run(self):
         self._exit_set = False
@@ -103,7 +104,7 @@ class BatchFileCopy:
             time.sleep(0.05)
 
     def wait_for_all(self):
-        self.t.join()
+        self.t.wait_join()
 
     async def _do_copy(self, src, dst, **kwargs):
         src = self.files.get_descriptor(src)

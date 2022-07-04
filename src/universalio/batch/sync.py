@@ -43,7 +43,7 @@ class DirectorySync:
             time.sleep(0.05)
 
     def wait_for_all(self):
-        self.t.join()
+        self.t.wait_join()
 
     async def _do_sync(self, src, dst):
         if self.sem is None:
@@ -75,7 +75,7 @@ class DirectorySynchronizer:
         logging.getLogger(__name__).info("Synchronizing directory {}".format(self.source))
         async for src_file, dst_file in self.source.crawl(self.target):
             src_print = await src_file.fingerprint_async()
-            logging.getLogger(__name__).info("Checking file {}".format(src_file))
+            logging.getLogger(__name__).debug("Checking file {}".format(src_file))
             if await self._check_sync(src_file, dst_file, src_print):
                 tsk = self.loop.create_task(self._do_file_copy(src_file, dst_file, src_print))
                 work.append(tsk)
@@ -83,9 +83,9 @@ class DirectorySynchronizer:
 
     async def _do_file_copy(self, src_file, dst_file, src_print):
         async with self.sem:
-            logging.getLogger(__name__).info("Copying file {}".format(src_file))
+            logging.getLogger(__name__).debug("Copying file {}".format(src_file))
             await src_file.copy_async(dst_file, _skip_dir_check=True, allow_overwrite=True, use_partial_file=True)
-            logging.getLogger(__name__).info("Saving fingerprint for {}".format(src_file))
+            logging.getLogger(__name__).trace("Saving fingerprint for {}".format(src_file))
             await self.checker.save_fingerprint(str(src_file), src_print)
 
     async def _check_sync(self, src_file, dst_file, src_print):
@@ -134,6 +134,9 @@ class InMemoryChecker:
     def __init__(self):
         self._lock = asyncio.Lock()
         self._mem = {}
+
+    def close(self):
+        pass
 
     async def get_last_fingerprint(self, file):
         if file in self._mem:
