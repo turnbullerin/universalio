@@ -39,7 +39,7 @@ class AsynchronousThread(Thread):
 
     def result(self, job_name):
         if job_name in self._completed:
-            return self._completed[job_name].result()
+            return self._completed[job_name]
         return None
 
     async def process_queue(self):
