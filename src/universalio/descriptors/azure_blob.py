@@ -3,6 +3,7 @@ from .base import FileWriter, FileReader, UriResourceDescriptor, AsynchronousDes
 from universalio import GlobalLoopContext
 from autoinject import injector
 import azure.storage.blob.aio as asb
+from azure.identity import DefaultAzureCredential
 from urllib.parse import urlparse
 import asyncio
 from zirconium import ApplicationConfig
@@ -107,8 +108,12 @@ class _AzureBlobHostRegistry(ConnectionRegistry):
     def _construct_key(self, connect_str, *args, **kwargs):
         return hashlib.sha512(connect_str.encode("utf-8")).hexdigest()
 
-    async def _create_connection(self, connect_str, *args, **kwargs):
-        return asb.BlobServiceClient.from_connection_string(connect_str)
+    async def _create_connection(self, connect_str: str, use_credentials: bool, credentials: str = None, *args, **kwargs):
+        if use_credentials:
+            cred = credentials if credentials is not None else DefaultAzureCredential()
+            return asb.BlobServiceClient(connect_str, credential=cred)
+        else:
+            return asb.BlobServiceClient.from_connection_string(connect_str)
 
     async def _close_connection(self, conn):
         await conn.close()
@@ -120,12 +125,14 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
     loop: GlobalLoopContext = None
 
     @injector.construct
-    def __init__(self, uri, connect_str):
+    def __init__(self, uri, connect_str: str = None, use_default_credentials: bool = True, credentials=None):
         UriResourceDescriptor.__init__(self, uri, True)
         self.connect_str = connect_str
+        self._use_credentials = use_default_credentials
+        self._credentials = credentials
 
     async def _connect(self):
-        return await self.host_manager.connect(self.connect_str)
+        return await self.host_manager.connect(self.connect_str, self._use_credentials, self._credentials)
 
     async def _get_container_client(self):
         conn = await self._connect()
@@ -206,6 +213,8 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
     async def is_local_to(self, target_resource):
         if not isinstance(target_resource, AzureBlobDescriptor):
             return False
+        # TODO
+        return False
 
     async def _properties(self):
         return await self._cached_async("properties", self._get_properties)
@@ -251,11 +260,19 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         if not location.lower().startswith("https://") or location.lower().startswith("http://"):
             return False
         p = urlparse(location)
+        # TODO: Support non-Windows domains?
         return str(p.path) != "/" and str(p.hostname).endswith(".blob.core.windows.net")
 
     @staticmethod
     @injector.inject
     def create_from_location(location: str, config: ApplicationConfig):
         pieces = urlparse(location)
-        connect_str = config.get(("universalio", "azure", pieces.hostname, "connect_str"), default=None)
-        return AzureBlobDescriptor(location, connect_str)
+        storage_account = pieces.hostname.split(".")[0]
+        auth_config = config.get(("universalio", "azure"))
+        connect_str = f"https://{pieces.hostname}"
+        use_credentials = True
+        if storage_account in auth_config:
+            if "connect_str" in auth_config[storage_account] and auth_config[storage_account]["connect_str"]:
+                connect_str = auth_config[storage_account]["connect_str"]
+                use_credentials = False
+        return AzureBlobDescriptor(location, connect_str, use_credentials)
