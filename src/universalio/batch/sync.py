@@ -33,6 +33,9 @@ class DirectorySync:
         self.t.run_coro(name, self._do_sync, src, dst)
         return name
 
+    def is_completed(self, job_name):
+        return self.t.is_completed(job_name)
+
     def result(self, job_name):
         return self.t.result(job_name)
 
@@ -56,6 +59,7 @@ class DirectorySync:
                 self.checker = SqliteSyncManager(db)
         synchronizer = DirectorySynchronizer(src, dst, self.checker, self.sem)
         await synchronizer.sync_all()
+        return synchronizer.file_updates
 
 
 class DirectorySynchronizer:
@@ -69,6 +73,7 @@ class DirectorySynchronizer:
         self.target = self.files.get_descriptor(dst)
         self.checker = sync_checker
         self.sem = sem
+        self.file_updates = 0
 
     async def sync_all(self):
         work = []
@@ -79,6 +84,7 @@ class DirectorySynchronizer:
             if await self._check_sync(src_file, dst_file, src_print):
                 tsk = self.loop.create_task(self._do_file_copy(src_file, dst_file, src_print))
                 work.append(tsk)
+                self.file_updates += 1
         await asyncio.gather(*work)
 
     async def _do_file_copy(self, src_file, dst_file, src_print):
