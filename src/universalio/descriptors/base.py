@@ -387,7 +387,7 @@ class ResourceDescriptor(abc.ABC):
         if (not allow_overwrite) and await target_resource.exists_async():
             raise UNIOError("Resource {} already exists".format(target_resource))
 
-        if use_partial_file and await self._supports_fast_rename_async():
+        if use_partial_file and await target_resource._supports_fast_rename_async():
             ext_no = 1
             bn = target_resource.basename()
             partial_file = target_resource.with_name("{}.partial{}".format(bn, ext_no))
@@ -442,7 +442,7 @@ class ResourceDescriptor(abc.ABC):
                     raise UNIOError("Resource {} already exists".format(target_file))
         tasks = []
         async for res, target_res in self.crawl(target_dir, recursive or make_stub_dirs, recursive):
-            if await res.is_dir():
+            if await res.is_dir_async():
                 await res.mkdir_async()
             else:
                 tasks.append(asyncio.create_task(res._copy_file_async(
