@@ -211,7 +211,7 @@ class AzureBlobDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
     async def _do_mkdir_async(self):
         pass
 
-    async def is_local_to(self, target_resource):
+    async def is_local_to_async(self, target_resource):
         if not isinstance(target_resource, AzureBlobDescriptor):
             return False
         # TODO

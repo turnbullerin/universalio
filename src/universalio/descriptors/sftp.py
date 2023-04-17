@@ -122,7 +122,7 @@ class SFTPDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         self.clear_cache()
         return _SFTPWriterContextManager(self._connect(), self.path)
 
-    async def is_local_to(self, target_resource):
+    async def is_local_to_async(self, target_resource):
         if not isinstance(target_resource, SFTPDescriptor):
             return False
         return target_resource.hostname == self.hostname and target_resource.port == self.port

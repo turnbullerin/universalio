@@ -330,7 +330,7 @@ class ResourceDescriptor(abc.ABC):
         return target_resource
 
     async def _move_dir_async(self, target_resource, **kwargs):
-        if self.is_local_to(target_resource):
+        if self.is_local_to_async(target_resource):
             x = await self._local_move_dir_async(target_resource, **kwargs)
         else:
             x = await self._do_move_dir_async(target_resource, **kwargs)
@@ -348,11 +348,12 @@ class ResourceDescriptor(abc.ABC):
     async def _move_file_async(self, target_resource, **kwargs):
         if (not kwargs.get("allow_overwrite", False)) and await target_resource.exists_async():
             raise UNIOError("File {} already exists".format(target_resource))
-        if self.is_local_to(target_resource):
+        if self.is_local_to_async(target_resource):
             x = await self._local_move_file_async(target_resource, **kwargs)
         else:
             x = await self._do_move_file_async(target_resource, **kwargs)
         target_resource.clear_cache()
+        self.clear_cache()
         self.clear_cache()
         return x
 
@@ -406,10 +407,11 @@ class ResourceDescriptor(abc.ABC):
 
     async def _do_copy_file(self, target_resource, **kwargs):
         # Delegate copy to another method so we can override it as needed
-        if await self.is_local_to(target_resource):
+        if await self.is_local_to_async(target_resource):
             await self._local_copy_async(target_resource, **kwargs)
         else:
             await self._do_copy_async(target_resource, **kwargs)
+        target_resource.clear_cache()
 
     async def _do_copy_async(self, target_resource, chunk_size=None, **kwargs):
         async with self.reader() as reader:
@@ -429,7 +431,7 @@ class ResourceDescriptor(abc.ABC):
         # Note that allow_overwrite is respected by the file copying itself
         if require_not_exists and await target_resource.exists_async():
             raise UNIOError("Target directory {} already exists".format(target_resource))
-        if await self.is_local_to(target_resource):
+        if await self.is_local_to_async(target_resource):
             await self._local_copy_dir_async(target_resource, **kwargs)
         else:
             await self._do_copy_dir_async(target_resource, **kwargs)
@@ -462,7 +464,7 @@ class ResourceDescriptor(abc.ABC):
         results = []
         async for res in self.crawl_async(*args, **kwargs):
             results.append(res)
-        return res
+        return results
 
     async def crawl_async(self, mirror_resource=None, include_directories=False, recursive=True):
         work = [(self, mirror_resource)]
@@ -473,10 +475,13 @@ class ResourceDescriptor(abc.ABC):
                 check_dir = await file.is_dir_async()
                 if (not check_dir) or include_directories:
                     yield file if mirror_file is None else (file, mirror_file)
-                if check_dir:
+                if check_dir and recursive:
                     work.append((file, mirror_file))
 
-    async def is_local_to(self, target_resource):
+    def is_local_to(self, target_resource):
+        return self.loop.run(self.is_local_to_async(target_resource))
+
+    async def is_local_to_async(self, target_resource):
         return False
 
 

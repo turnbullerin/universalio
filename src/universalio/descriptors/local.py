@@ -87,7 +87,7 @@ class LocalDescriptor(PathResourceDescriptor, SynchronousDescriptor):
         self.clear_cache()
         return _LocalFileWriterContextManager(self.path)
 
-    async def is_local_to(self, target_resource):
+    async def is_local_to_async(self, target_resource):
         return isinstance(target_resource, LocalDescriptor)
 
     async def _do_rmdir_async(self):

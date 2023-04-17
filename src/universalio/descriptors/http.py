@@ -293,7 +293,7 @@ class HttpDescriptor(UriResourceDescriptor, AsynchronousDescriptor):
         self.clear_cache()
         return HttpWriterContextManager(self.uri, self._client())
 
-    def is_local_to(self, resource):
+    def is_local_to_async(self, resource):
         if not isinstance(resource, HttpDescriptor):
             return False
         return self.hostname == resource.hostname

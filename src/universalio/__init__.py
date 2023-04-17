@@ -15,4 +15,4 @@ def _config_file_manager(config):
 FileWrapper = _FileWrapper()
 
 
-__version__ = "0.0.11"
+__version__ = "0.0.13"

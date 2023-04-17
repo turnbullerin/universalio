@@ -11,7 +11,12 @@ import time
 class GlobalLoopContext:
 
     def __init__(self):
-        self.loop = asyncio.get_event_loop()
+        self.loop = None
+        try:
+            self.loop = asyncio.get_event_loop()
+        except RuntimeError as ex:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
         atexit.register(GlobalLoopContext.exit, self)
 
     def recreate_loop(self):
