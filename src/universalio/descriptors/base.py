@@ -330,7 +330,7 @@ class ResourceDescriptor(abc.ABC):
         return target_resource
 
     async def _move_dir_async(self, target_resource, **kwargs):
-        if self.is_local_to_async(target_resource):
+        if await self.is_local_to_async(target_resource):
             x = await self._local_move_dir_async(target_resource, **kwargs)
         else:
             x = await self._do_move_dir_async(target_resource, **kwargs)
@@ -348,7 +348,7 @@ class ResourceDescriptor(abc.ABC):
     async def _move_file_async(self, target_resource, **kwargs):
         if (not kwargs.get("allow_overwrite", False)) and await target_resource.exists_async():
             raise UNIOError("File {} already exists".format(target_resource))
-        if self.is_local_to_async(target_resource):
+        if await self.is_local_to_async(target_resource):
             x = await self._local_move_file_async(target_resource, **kwargs)
         else:
             x = await self._do_move_file_async(target_resource, **kwargs)
