@@ -2,11 +2,10 @@ import hashlib
 from .base import FileWriter, FileReader, UriResourceDescriptor, AsynchronousDescriptor, ConnectionRegistry
 from universalio import GlobalLoopContext
 from autoinject import injector
-import azure.storage.blob.aio as asb
-from azure.identity import DefaultAzureCredential
 from urllib.parse import urlparse
 import asyncio
 from zirconium import ApplicationConfig
+
 
 
 AZURE_BLOB_UPLOAD_BUFFER = 5 * 1024 * 1024
@@ -109,6 +108,8 @@ class _AzureBlobHostRegistry(ConnectionRegistry):
         return hashlib.sha512(connect_str.encode("utf-8")).hexdigest()
 
     async def _create_connection(self, connect_str: str, use_credentials: bool, credentials: str = None, *args, **kwargs):
+        import azure.storage.blob.aio as asb
+        from azure.identity import DefaultAzureCredential
         if use_credentials:
             cred = credentials if credentials is not None else DefaultAzureCredential()
             return asb.BlobServiceClient(connect_str, credential=cred)

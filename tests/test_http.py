@@ -1,3 +1,4 @@
+import sys
 import unittest
 import pathlib
 import subprocess
@@ -21,6 +22,8 @@ class TestHttpDescriptor(unittest.TestCase):
         p = pathlib.Path(__file__).parent / "tmp" / "http"
         os.chdir(str(p))
         cmd = [
+            sys.executable,
+            "-m"
             "flask",
             "run",
         ]

@@ -437,11 +437,11 @@ class ResourceDescriptor(abc.ABC):
 
     async def _do_copy_dir_async(self, target_dir, recursive=True, preliminary_check=False, make_stub_dirs=False, **kwargs):
         if preliminary_check and not kwargs.get("allow_overwrite", False):
-            async for file, target_file in self.crawl(target_dir, recursive=recursive):
+            async for file, target_file in self.crawl_async(target_dir, recursive=recursive):
                 if target_file.exists():
                     raise UNIOError("Resource {} already exists".format(target_file))
         tasks = []
-        async for res, target_res in self.crawl(target_dir, recursive or make_stub_dirs, recursive):
+        async for res, target_res in self.crawl_async(target_dir, recursive or make_stub_dirs, recursive):
             if await res.is_dir_async():
                 await res.mkdir_async()
             else:
@@ -455,7 +455,16 @@ class ResourceDescriptor(abc.ABC):
     async def _local_copy_dir_async(self, target_resource, recursive=True, **kwargs):
         await self._do_copy_dir_async(target_resource, recursive, **kwargs)
 
-    async def crawl(self, mirror_resource=None, include_directories=False, recursive=True):
+    def crawl(self, *args, **kwargs):
+        return self.loop.run(self._crawl_gather(*args, **kwargs))
+
+    async def _crawl_gather(self, *args, **kwargs):
+        results = []
+        async for res in self.crawl_async(*args, **kwargs):
+            results.append(res)
+        return res
+
+    async def crawl_async(self, mirror_resource=None, include_directories=False, recursive=True):
         work = [(self, mirror_resource)]
         while work:
             src, trg = work.pop()

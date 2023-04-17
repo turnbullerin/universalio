@@ -24,26 +24,27 @@ class TestSFTPDescriptor(unittest.TestCase):
         kf = p / "test_rsa.key"
         if not kf.exists():
             openssl = shutil.which("openssl")
-            cmd = [
-                openssl,
-                "req",
-                "-out",
-                "CSR.csr",
-                "-new",
-                "-newkey",
-                "rsa:2048",
-                "-nodes",
-                "-subj",
-                "/dc=ORG/CN=localhost",
-                "-keyout",
-                str(kf)
-            ]
-            subprocess.run(cmd)
-            content = None
-            with open(kf, "r") as h:
-                content = h.read()
-            with open(kf, "w") as h:
-                h.write(content.replace("-----BEGIN PRIVATE KEY", "-----BEGIN RSA PRIVATE KEY"))
+            if openssl is not None:
+                cmd = [
+                    openssl,
+                    "req",
+                    "-out",
+                    "CSR.csr",
+                    "-new",
+                    "-newkey",
+                    "rsa:2048",
+                    "-nodes",
+                    "-subj",
+                    "/dc=ORG/CN=localhost",
+                    "-keyout",
+                    str(kf)
+                ]
+                subprocess.run(cmd)
+                content = None
+                with open(kf, "r") as h:
+                    content = h.read()
+                with open(kf, "w") as h:
+                    h.write(content.replace("-----BEGIN PRIVATE KEY", "-----BEGIN RSA PRIVATE KEY"))
         os.chdir(str(p))
         cmd = [
             "sftpserver",
